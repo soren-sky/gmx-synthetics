@@ -4,9 +4,64 @@ import { getExistingContractAddresses } from "../config/overwrite";
 import path from "path";
 import { findFile, readJsonFile, searchDirectory } from "./file";
 
+// Nonce error retry configuration
+const NONCE_RETRY_CONFIG = {
+  maxRetries: 5,
+  baseDelayMs: 3000,
+  maxDelayMs: 30000,
+};
+
+// Check if error is a nonce-related error
+function isNonceError(error: any): boolean {
+  const errorMessage = error?.message || error?.toString() || "";
+  const noncePatterns = [
+    /nonce.*too low/i,
+    /nonce.*already.*used/i,
+    /NONCE_EXPIRED/i,
+    /replacement transaction underpriced/i,
+    /transaction.*underpriced/i,
+    /already known/i,
+    /nonce.*mismatch/i,
+  ];
+  return noncePatterns.some((pattern) => pattern.test(errorMessage));
+}
+
+// Wait with exponential backoff
+async function waitWithBackoff(attempt: number): Promise<void> {
+  const delay = Math.min(NONCE_RETRY_CONFIG.baseDelayMs * Math.pow(2, attempt), NONCE_RETRY_CONFIG.maxDelayMs);
+  console.log(`  Waiting ${delay}ms before retry (attempt ${attempt + 1}/${NONCE_RETRY_CONFIG.maxRetries})...`);
+  await new Promise((resolve) => setTimeout(resolve, delay));
+}
+
 export async function deployContract(name, args, contractOptions = {}) {
   const contractFactory = await ethers.getContractFactory(name, contractOptions);
-  return await contractFactory.deploy(...args);
+
+  // Deploy with nonce error retry logic
+  let lastError: any;
+  for (let attempt = 0; attempt < NONCE_RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      const contract = await contractFactory.deploy(...args);
+      await contract.deployed();
+      return contract;
+    } catch (e) {
+      lastError = e;
+
+      if (isNonceError(e)) {
+        console.log(`  Nonce error in deployContract for ${name}: ${e.message || e}`);
+
+        if (attempt < NONCE_RETRY_CONFIG.maxRetries - 1) {
+          await waitWithBackoff(attempt);
+          console.log(`  Retrying deployContract for ${name}...`);
+          continue;
+        }
+      }
+
+      // Re-throw non-nonce errors or after max retries
+      throw e;
+    }
+  }
+
+  throw new Error(`deployContract failed after ${NONCE_RETRY_CONFIG.maxRetries} retries: ${lastError}`);
 }
 
 export async function contractAt(name, address, provider?) {
@@ -72,27 +127,56 @@ export function createDeployFunction({
       waitConfirmations = 2;
     }
 
-    try {
-      deployedContract = await deploy(contractName, {
-        from: deployer,
-        log: true,
-        args: deployArgs,
-        libraries,
-        waitConfirmations,
-      });
-    } catch (e) {
-      // the caught error might not be very informative
-      // e.g. if some library dependency is missing, which library it is
-      // is not shown in the error
-      // attempt a deploy using hardhat so that a more detailed error
-      // would be thrown
-      await deployContract(contractName, deployArgs, {
-        libraries,
-      });
+    // Add wait confirmations for BSC networks to avoid nonce issues
+    if (network.name === "bsc" || network.name === "bscTestnet") {
+      waitConfirmations = 1;
+    }
 
-      // throw an error even if the hardhat deploy works
-      // because the actual deploy did not succeed
-      throw new Error(`Deploy failed with error ${e}`);
+    // Deploy with nonce error retry logic
+    let lastError: any;
+    for (let attempt = 0; attempt < NONCE_RETRY_CONFIG.maxRetries; attempt++) {
+      try {
+        deployedContract = await deploy(contractName, {
+          from: deployer,
+          log: true,
+          args: deployArgs,
+          libraries,
+          waitConfirmations,
+        });
+        // Success - break out of retry loop
+        break;
+      } catch (e) {
+        lastError = e;
+
+        if (isNonceError(e)) {
+          console.log(`  Nonce error detected for ${contractName}: ${e.message || e}`);
+
+          if (attempt < NONCE_RETRY_CONFIG.maxRetries - 1) {
+            await waitWithBackoff(attempt);
+            console.log(`  Retrying deployment of ${contractName}...`);
+            continue;
+          }
+        }
+
+        // For non-nonce errors or after max retries, try hardhat deploy for better error message
+        try {
+          await deployContract(contractName, deployArgs, {
+            libraries,
+          });
+        } catch (hardhatError) {
+          // If hardhat deploy also fails, it might give us a better error message
+          console.error(`  Hardhat deploy error: ${hardhatError}`);
+        }
+
+        // throw an error even if the hardhat deploy works
+        // because the actual deploy did not succeed
+        throw new Error(`Deploy failed with error ${e}`);
+      }
+    }
+
+    // If we got here without deployedContract, throw the last error
+    if (!deployedContract) {
+      throw new Error(`Deploy failed after ${NONCE_RETRY_CONFIG.maxRetries} retries with error ${lastError}`);
     }
 
     if (afterDeploy) {

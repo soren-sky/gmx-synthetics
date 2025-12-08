@@ -3,6 +3,65 @@ import { GELATO_RELAY_ADDRESS } from "./addresses";
 import { hashRelayParams, signTypedData } from "./helpers";
 import { getDomain } from "./helpers";
 import { getRelayParams } from "./helpers";
+
+// Nonce error retry configuration
+const NONCE_RETRY_CONFIG = {
+  maxRetries: 5,
+  baseDelayMs: 3000,
+  maxDelayMs: 30000,
+};
+
+// Check if error is a nonce-related error
+function isNonceError(error: any): boolean {
+  const errorMessage = error?.message || error?.error?.message || error?.toString() || "";
+  const noncePatterns = [
+    /nonce.*too low/i,
+    /nonce.*already.*used/i,
+    /NONCE_EXPIRED/i,
+    /replacement transaction underpriced/i,
+    /transaction.*underpriced/i,
+    /already known/i,
+    /nonce.*mismatch/i,
+  ];
+  return noncePatterns.some((pattern) => pattern.test(errorMessage));
+}
+
+// Wait with exponential backoff
+async function waitWithBackoff(attempt: number): Promise<void> {
+  const delay = Math.min(NONCE_RETRY_CONFIG.baseDelayMs * Math.pow(2, attempt), NONCE_RETRY_CONFIG.maxDelayMs);
+  console.log(`  Waiting ${delay}ms before retry (attempt ${attempt + 1}/${NONCE_RETRY_CONFIG.maxRetries})...`);
+  await new Promise((resolve) => setTimeout(resolve, delay));
+}
+
+// Helper function to send transaction with nonce retry
+async function sendTransactionWithRetry(
+  sender: ethers.Signer,
+  txParams: ethers.providers.TransactionRequest
+): Promise<ethers.providers.TransactionResponse> {
+  let lastError: any;
+
+  for (let attempt = 0; attempt < NONCE_RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      return await sender.sendTransaction(txParams);
+    } catch (ex) {
+      lastError = ex;
+
+      if (isNonceError(ex)) {
+        console.log(`  Nonce error in sendTransaction: ${ex.message || ex}`);
+
+        if (attempt < NONCE_RETRY_CONFIG.maxRetries - 1) {
+          await waitWithBackoff(attempt);
+          console.log(`  Retrying sendTransaction...`);
+          continue;
+        }
+      }
+
+      throw ex;
+    }
+  }
+
+  throw new Error(`sendTransaction failed after ${NONCE_RETRY_CONFIG.maxRetries} retries: ${lastError}`);
+}
 import {
   getCancelOrderSignature,
   getCreateOrderSignature,
@@ -68,7 +127,7 @@ export async function sendCreateDeposit(p: SendCreate) {
     ["bytes", "address", "address", "uint256"],
     [createDepositCalldata, GELATO_RELAY_ADDRESS, p.relayFeeToken, p.relayFeeAmount]
   );
-  return p.sender.sendTransaction({
+  return sendTransactionWithRetry(p.sender, {
     to: p.relayRouter.address,
     data: calldata,
   });
@@ -98,7 +157,7 @@ export async function sendCreateWithdrawal(p: SendCreate) {
     ["bytes", "address", "address", "uint256"],
     [createWithdrawalCalldata, GELATO_RELAY_ADDRESS, p.relayFeeToken, p.relayFeeAmount]
   );
-  return p.sender.sendTransaction({
+  return sendTransactionWithRetry(p.sender, {
     to: p.relayRouter.address,
     data: calldata,
   });
@@ -128,7 +187,7 @@ export async function sendCreateShift(p: SendCreate) {
     ["bytes", "address", "address", "uint256"],
     [createShiftCalldata, GELATO_RELAY_ADDRESS, p.relayFeeToken, p.relayFeeAmount]
   );
-  return p.sender.sendTransaction({
+  return sendTransactionWithRetry(p.sender, {
     to: p.relayRouter.address,
     data: calldata,
   });

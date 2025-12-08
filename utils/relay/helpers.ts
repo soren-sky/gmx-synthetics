@@ -2,6 +2,35 @@ import { _TypedDataEncoder } from "ethers/lib/utils";
 import { BigNumberish, ethers } from "ethers";
 import { GELATO_RELAY_ADDRESS } from "./addresses";
 
+// Nonce error retry configuration
+const NONCE_RETRY_CONFIG = {
+  maxRetries: 5,
+  baseDelayMs: 3000,
+  maxDelayMs: 30000,
+};
+
+// Check if error is a nonce-related error
+function isNonceError(error: any): boolean {
+  const errorMessage = error?.message || error?.error?.message || error?.toString() || "";
+  const noncePatterns = [
+    /nonce.*too low/i,
+    /nonce.*already.*used/i,
+    /NONCE_EXPIRED/i,
+    /replacement transaction underpriced/i,
+    /transaction.*underpriced/i,
+    /already known/i,
+    /nonce.*mismatch/i,
+  ];
+  return noncePatterns.some((pattern) => pattern.test(errorMessage));
+}
+
+// Wait with exponential backoff
+async function waitWithBackoff(attempt: number): Promise<void> {
+  const delay = Math.min(NONCE_RETRY_CONFIG.baseDelayMs * Math.pow(2, attempt), NONCE_RETRY_CONFIG.maxDelayMs);
+  console.log(`  Waiting ${delay}ms before retry (attempt ${attempt + 1}/${NONCE_RETRY_CONFIG.maxRetries})...`);
+  await new Promise((resolve) => setTimeout(resolve, delay));
+}
+
 export type SubaccountApproval = {
   subaccount: string;
   shouldAdd: boolean;
@@ -266,20 +295,38 @@ export async function sendRelayTransaction({
   sender: ethers.Signer;
   relayRouter: ethers.Contract;
 }) {
-  try {
-    return await sender.sendTransaction({
-      to: relayRouter.address,
-      data: ethers.utils.solidityPack(
-        ["bytes", "address", "address", "uint256"],
-        [calldata, GELATO_RELAY_ADDRESS, gelatoRelayFeeToken, gelatoRelayFeeAmount]
-      ),
-      gasLimit: 5000000,
-    });
-  } catch (ex) {
-    if (ex.error) {
-      // this gives much more readable error in the console with a stacktrace
-      throw ex.error;
+  let lastError: any;
+
+  for (let attempt = 0; attempt < NONCE_RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      return await sender.sendTransaction({
+        to: relayRouter.address,
+        data: ethers.utils.solidityPack(
+          ["bytes", "address", "address", "uint256"],
+          [calldata, GELATO_RELAY_ADDRESS, gelatoRelayFeeToken, gelatoRelayFeeAmount]
+        ),
+        gasLimit: 5000000,
+      });
+    } catch (ex) {
+      lastError = ex;
+
+      if (isNonceError(ex)) {
+        console.log(`  Nonce error in sendRelayTransaction: ${ex.message || ex}`);
+
+        if (attempt < NONCE_RETRY_CONFIG.maxRetries - 1) {
+          await waitWithBackoff(attempt);
+          console.log(`  Retrying sendRelayTransaction...`);
+          continue;
+        }
+      }
+
+      if (ex.error) {
+        // this gives much more readable error in the console with a stacktrace
+        throw ex.error;
+      }
+      throw ex;
     }
-    throw ex;
   }
+
+  throw new Error(`sendRelayTransaction failed after ${NONCE_RETRY_CONFIG.maxRetries} retries: ${lastError}`);
 }
