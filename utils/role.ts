@@ -26,7 +26,7 @@ export async function grantRoleIfNotGranted(deployedContract, role: string, addr
 
   if (!hasRole) {
     log("granting role %s to %s %s", role, addressLabel, address);
-    await execute("RoleStore", { from: deployer, log: true }, "grantRole", address, roleHash);
+    await execute("RoleStore", { from: deployer, log: true, waitConfirmations: 2 }, "grantRole", address, roleHash);
   } else {
     log("role %s already granted to %s %s", role, addressLabel, address);
   }
@@ -47,7 +47,7 @@ export async function revokeRoleIfGranted(contract, role: string, addressLabel =
 
   if (hasRole) {
     log("revoking role %s for %s %s", role, addressLabel, address);
-    await execute("RoleStore", { from: deployer, log: true }, "revokeRole", address, roleHash);
+    await execute("RoleStore", { from: deployer, log: true, waitConfirmations: 2 }, "revokeRole", address, roleHash);
   } else {
     log("role %s already revoked for %s %s", role, addressLabel, address);
   }

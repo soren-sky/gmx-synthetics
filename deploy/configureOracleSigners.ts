@@ -16,14 +16,14 @@ const func = async ({ deployments, getNamedAccounts, gmx }: HardhatRuntimeEnviro
   for (const oracleSigner of oracleSigners) {
     if (!existingSigners.includes(oracleSigner)) {
       log("adding oracle signer", oracleSigner);
-      await execute("OracleStore", { from: deployer, log: true }, "addSigner", oracleSigner);
+      await execute("OracleStore", { from: deployer, log: true, waitConfirmations: 2 }, "addSigner", oracleSigner);
     }
   }
 
   for (const existingSigner of existingSigners) {
     if (!oracleSigners.includes(existingSigner)) {
       log("removing oracle signer", existingSigner);
-      await execute("OracleStore", { from: deployer, log: true }, "removeSigner", existingSigner);
+      await execute("OracleStore", { from: deployer, log: true, waitConfirmations: 2 }, "removeSigner", existingSigner);
     }
   }
 

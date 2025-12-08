@@ -20,7 +20,7 @@ const func = async ({ deployments, getNamedAccounts, gmx }: HardhatRuntimeEnviro
   const glvSymbol = "GLV [WETH-USDC]";
   await execute(
     "GlvFactory",
-    { from: deployer, log: true },
+    { from: deployer, log: true, waitConfirmations: 2 },
     "createGlv",
     weth.address,
     usdc.address,
@@ -66,21 +66,21 @@ const func = async ({ deployments, getNamedAccounts, gmx }: HardhatRuntimeEnviro
 
   await execute(
     "DataStore",
-    { from: deployer, log: true },
+    { from: deployer, log: true, waitConfirmations: 2 },
     "setUint",
     keys.tokenTransferGasLimit(glvShiftAddress),
     200_000
   );
   await execute(
     "GlvShiftHandler",
-    { from: deployer, log: true },
+    { from: deployer, log: true, waitConfirmations: 2 },
     "addMarketToGlv",
     glvShiftAddress,
     ethUsdMarketAddress
   );
   await execute(
     "GlvShiftHandler",
-    { from: deployer, log: true },
+    { from: deployer, log: true, waitConfirmations: 2 },
     "addMarketToGlv",
     glvShiftAddress,
     solUsdMarketAddress

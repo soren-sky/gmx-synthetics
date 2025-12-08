@@ -21,7 +21,7 @@ const func = createDeployFunction({
       log(`Updating tier ${tierId} to ${JSON.stringify(tier)}`);
       await execute(
         "ReferralStorage",
-        { from: deployer, log: true },
+        { from: deployer, log: true, waitConfirmations: 2 },
         "setTier",
         tierId,
         tier.totalRebate,

@@ -39,7 +39,7 @@ const func = async ({ deployments, getNamedAccounts, gmx }: HardhatRuntimeEnviro
     log("creating market %s:%s:%s:%s", indexToken, longToken, shortToken, marketType);
     await execute(
       "MarketFactory",
-      { from: deployer, log: true },
+      { from: deployer, log: true, waitConfirmations: 2 },
       "createMarket",
       indexToken,
       longToken,

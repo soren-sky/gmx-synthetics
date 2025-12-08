@@ -18,7 +18,7 @@ const func = async ({ getNamedAccounts, deployments, gmx }: HardhatRuntimeEnviro
     });
     priceFeed.address = address;
 
-    await execute(contractName, { from: deployer, log: true }, "setAnswer", priceFeed.initPrice);
+    await execute(contractName, { from: deployer, log: true, waitConfirmations: 2 }, "setAnswer", priceFeed.initPrice);
   }
 };
 

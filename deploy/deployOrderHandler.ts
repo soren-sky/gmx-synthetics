@@ -28,7 +28,13 @@ const func = createDeployFunction({
     const { execute } = deployments;
 
     if (!["arbitrum", "avalanche", "botanix"].includes(network.name)) {
-      await execute("ReferralStorage", { from: deployer, log: true }, "setHandler", deployedContract.address, true);
+      await execute(
+        "ReferralStorage",
+        { from: deployer, log: true, waitConfirmations: 2 },
+        "setHandler",
+        deployedContract.address,
+        true
+      );
     }
 
     await grantRoleIfNotGranted(deployedContract, "CONTROLLER");
