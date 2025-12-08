@@ -17,6 +17,8 @@ const rolesToRemove = {
   botanix: [],
   avalancheFuji: [],
   arbitrumSepolia: [],
+  bsc: [],
+  bscTestnet: [],
 };
 
 const func = async ({ gmx, network }) => {

@@ -269,6 +269,15 @@ export default async function ({ network }: HardhatRuntimeEnvironment) {
     botanix: {
       positionFeeReceiverFactor: decimalToFloat(50, 2), // 50%
     },
+    bsc: {
+      maxAutoCancelOrders: 11,
+      maxTotalCallbackGasLimitForAutoCancelOrders: 10_000_000,
+    },
+    bscTestnet: {
+      maxAutoCancelOrders: 11,
+      maxTotalCallbackGasLimitForAutoCancelOrders: 10_000_000,
+      claimableCollateralDelay: 24 * 60 * 60,
+    },
   }[network.name];
 
   if (!networkConfig) {

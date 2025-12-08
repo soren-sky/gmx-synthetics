@@ -241,6 +241,28 @@ export default async function (hre: HardhatRuntimeEnvironment): Promise<RolesCon
       },
       ...testnetConfig,
     },
+    bsc: {
+      CONTROLLER: { [deployer]: true },
+      ORDER_KEEPER: { [deployer]: true },
+      ADL_KEEPER: { [deployer]: true },
+      LIQUIDATION_KEEPER: { [deployer]: true },
+      MARKET_KEEPER: { [deployer]: true },
+      FROZEN_ORDER_KEEPER: { [deployer]: true },
+      CONFIG_KEEPER: { [deployer]: true },
+      LIMITED_CONFIG_KEEPER: { [deployer]: true },
+      TIMELOCK_ADMIN: { [deployer]: true },
+    },
+    bscTestnet: {
+      CONTROLLER: { [deployer]: true },
+      ORDER_KEEPER: { [deployer]: true },
+      ADL_KEEPER: { [deployer]: true },
+      LIQUIDATION_KEEPER: { [deployer]: true },
+      MARKET_KEEPER: { [deployer]: true },
+      FROZEN_ORDER_KEEPER: { [deployer]: true },
+      CONFIG_KEEPER: { [deployer]: true },
+      LIMITED_CONFIG_KEEPER: { [deployer]: true },
+      TIMELOCK_ADMIN: { [deployer]: true },
+    },
   };
 
   // normalize addresses

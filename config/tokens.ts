@@ -1782,6 +1782,62 @@ const config: {
       decimals: 18,
     },
   },
+  bsc: {
+    WBNB: {
+      address: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+      wrappedNative: true,
+      decimals: 18,
+      transferGasLimit: 200 * 1000,
+    },
+    BTCB: {
+      address: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c",
+      decimals: 18,
+      transferGasLimit: 200 * 1000,
+    },
+    ETH: {
+      address: "0x2170Ed0880ac9A755fd29B2688956BD959F933F8",
+      decimals: 18,
+      transferGasLimit: 200 * 1000,
+    },
+    USDT: {
+      address: "0x55d398326f99059fF775485246999027B3197955",
+      decimals: 18,
+      transferGasLimit: 200 * 1000,
+    },
+    USDC: {
+      address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+      decimals: 18,
+      transferGasLimit: 200 * 1000,
+    },
+  },
+  bscTestnet: {
+    WBNB: {
+      address: "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd",
+      wrappedNative: true,
+      decimals: 18,
+      transferGasLimit: 200 * 1000,
+    },
+    USDT: {
+      decimals: 18,
+      transferGasLimit: 200 * 1000,
+      deploy: true,
+    },
+    USDC: {
+      decimals: 18,
+      transferGasLimit: 200 * 1000,
+      deploy: true,
+    },
+    BTCB: {
+      decimals: 18,
+      transferGasLimit: 200 * 1000,
+      deploy: true,
+    },
+    ETH: {
+      decimals: 18,
+      transferGasLimit: 200 * 1000,
+      deploy: true,
+    },
+  },
 };
 
 function getTokens(hre: HardhatRuntimeEnvironment) {

@@ -126,6 +126,28 @@ export default async function (hre: HardhatRuntimeEnvironment): Promise<OracleCo
       chainlinkPaymentToken: "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846",
       edgeOracleSigner: "0x1C498E2FE362e489A5Aac71690f9121914e0d55e",
     },
+
+    bsc: {
+      signers: [],
+      maxOraclePriceAge,
+      maxAtomicOraclePriceAge,
+      maxOracleTimestampRange,
+      maxRefPriceDeviationFactor: decimalToFloat(5, 1), // 50%
+      minOracleBlockConfirmations: 255,
+      minOracleSigners: 1,
+      chainlinkPaymentToken: "0x404460C6A5EdE2D891e8297795264fDe62ADBB75", // LINK on BSC
+    },
+
+    bscTestnet: {
+      signers: [],
+      maxOraclePriceAge,
+      maxAtomicOraclePriceAge,
+      maxOracleTimestampRange,
+      maxRefPriceDeviationFactor: decimalToFloat(5, 1), // 50%
+      minOracleBlockConfirmations: 255,
+      minOracleSigners: 1,
+      chainlinkPaymentToken: "0x84b9B910527Ad5C03A9Ca831909E21e236EA7b06", // LINK on BSC Testnet
+    },
   };
 
   const oracleConfig: OracleConfig = config[hre.network.name];

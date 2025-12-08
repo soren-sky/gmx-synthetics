@@ -54,6 +54,8 @@ const getRpcUrl = (network) => {
     baseSepolia: "https://sepolia.base.org",
     snowtrace: "https://api.avax.network/ext/bc/C/rpc",
     arbitrumBlockscout: "https://arb1.arbitrum.io/rpc",
+    bsc: "https://bsc-dataseed.binance.org/",
+    bscTestnet: "https://api.zan.top/node/v1/bsc/testnet/f2c73cf00319435aad95c05e30d4d963",
   };
 
   let rpc = defaultRpcs[network];
@@ -82,6 +84,8 @@ export const getExplorerUrl = (network) => {
     sepolia: "https://api.etherscan.io/v2/api?chainid=11155111",
     avalancheFuji: "https://api-testnet.snowtrace.io/",
     arbitrumBlockscout: "https://arbitrum.blockscout.com/api",
+    bsc: "https://api.bscscan.com/api",
+    bscTestnet: "https://api-testnet.bscscan.com/api",
   };
 
   const url = urls[network];
@@ -100,6 +104,8 @@ export const getBlockExplorerUrl = (network) => {
     arbitrumSepolia: "https://sepolia.arbiscan.io",
     baseSepolia: "https://sepolia.basescan.io",
     avalancheFuji: "https://testnet.snowtrace.io",
+    bsc: "https://bscscan.com",
+    bscTestnet: "https://testnet.bscscan.com",
   };
 
   const url = urls[network];
@@ -129,6 +135,8 @@ const getEtherscanApiKey = () => {
     snowtrace: "snowtrace", // apiKey is not required, just set a placeholder
     arbitrumBlockscout: "arbitrumBlockscout",
     botanix: process.env.BOTANIX_SCAN_API_KEY,
+    bsc: process.env.BSCSCAN_API_KEY,
+    bscTestnet: process.env.BSCSCAN_API_KEY,
   };
 };
 
@@ -164,6 +172,27 @@ const getEnvAccounts = (chainName?: string) => {
 
     const wallet = ethers.Wallet.fromMnemonic(data.mnemonic);
     return [wallet.privateKey];
+  }
+
+  // 自动读取 account.txt 文件
+  const accountTxtPaths = [
+    "./account.txt",
+    "../scripts/contract-deployment/account.txt",
+    "../../scripts/contract-deployment/account.txt",
+  ];
+
+  for (const accountPath of accountTxtPaths) {
+    if (fs.existsSync(accountPath)) {
+      const content = fs.readFileSync(accountPath, "utf-8");
+      const match = content.match(/bsc wallet prikey:\s*(\S+)/i);
+      if (match && match[1]) {
+        let key = match[1].trim();
+        if (!key.startsWith("0x")) {
+          key = "0x" + key;
+        }
+        return [key];
+      }
+    }
   }
 
   return [];
@@ -323,6 +352,32 @@ const config: HardhatUserConfig = {
       blockGasLimit: 2500000,
       // gasPrice: 50000000000,
     },
+    bsc: {
+      url: getRpcUrl("bsc"),
+      chainId: 56,
+      accounts: getEnvAccounts(),
+      gasPrice: 3000000000, // 3 gwei - BSC minimum is ~1 gwei
+      verify: {
+        etherscan: {
+          apiUrl: getExplorerUrl("bsc"),
+          apiKey: process.env.BSCSCAN_API_KEY,
+        },
+      },
+      blockGasLimit: 140000000,
+    },
+    bscTestnet: {
+      url: getRpcUrl("bscTestnet"),
+      chainId: 97,
+      accounts: getEnvAccounts(),
+      gasPrice: 5000000000, // 5 gwei - BSC testnet needs higher gas
+      verify: {
+        etherscan: {
+          apiUrl: getExplorerUrl("bscTestnet"),
+          apiKey: process.env.BSCSCAN_API_KEY,
+        },
+      },
+      blockGasLimit: 140000000,
+    },
   },
   // hardhat-deploy has issues with some contracts
   // https://github.com/wighawag/hardhat-deploy/issues/264
@@ -359,6 +414,22 @@ const config: HardhatUserConfig = {
         urls: {
           apiURL: "https://api.routescan.io/v2/network/mainnet/evm/43114/etherscan/api",
           browserURL: "https://snowtrace.io",
+        },
+      },
+      {
+        network: "bsc",
+        chainId: 56,
+        urls: {
+          apiURL: "https://api.bscscan.com/api",
+          browserURL: "https://bscscan.com",
+        },
+      },
+      {
+        network: "bscTestnet",
+        chainId: 97,
+        urls: {
+          apiURL: "https://api-testnet.bscscan.com/api",
+          browserURL: "https://testnet.bscscan.com",
         },
       },
       // {
