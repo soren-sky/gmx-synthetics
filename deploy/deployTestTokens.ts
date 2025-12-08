@@ -12,6 +12,14 @@ const func = async ({ getNamedAccounts, deployments, gmx, network }: HardhatRunt
   const { getTokens } = gmx;
   const tokens: Record<string, TokenConfig> = await getTokens();
 
+  // Set wait confirmations for live networks to avoid nonce conflicts
+  let waitConfirmations: number | undefined;
+  if (network.name === "bsc" || network.name === "bscTestnet") {
+    waitConfirmations = 2;
+  } else if (network.name === "avalanche" || network.name === "botanix") {
+    waitConfirmations = 2;
+  }
+
   for (const [tokenSymbol, token] of Object.entries(tokens)) {
     if (token.synthetic || !token.deploy) {
       continue;
@@ -34,6 +42,7 @@ const func = async ({ getNamedAccounts, deployments, gmx, network }: HardhatRunt
       log: true,
       contract: token.wrappedNative ? "WNT" : "MintableToken",
       args: token.wrappedNative ? [] : [tokenSymbol, tokenSymbol, token.decimals],
+      waitConfirmations,
     });
 
     tokens[tokenSymbol].address = address;
@@ -44,7 +53,10 @@ const func = async ({ getNamedAccounts, deployments, gmx, network }: HardhatRunt
 
       if (!token.wrappedNative) {
         const tokenContract = await ethers.getContractAt("MintableToken", address);
-        await tokenContract.mint(deployer, expandDecimals(1000000000, token.decimals));
+        const mintTx = await tokenContract.mint(deployer, expandDecimals(1000000000, token.decimals));
+        if (waitConfirmations) {
+          await mintTx.wait(waitConfirmations);
+        }
       }
     }
   }

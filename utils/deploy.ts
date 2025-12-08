@@ -129,7 +129,7 @@ export function createDeployFunction({
 
     // Add wait confirmations for BSC networks to avoid nonce issues
     if (network.name === "bsc" || network.name === "bscTestnet") {
-      waitConfirmations = 1;
+      waitConfirmations = 2;
     }
 
     // Deploy with nonce error retry logic

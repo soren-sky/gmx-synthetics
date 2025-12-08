@@ -369,7 +369,7 @@ const config: HardhatUserConfig = {
       url: getRpcUrl("bscTestnet"),
       chainId: 97,
       accounts: getEnvAccounts(),
-      gasPrice: 5000000000, // 5 gwei - BSC testnet needs higher gas
+      gasPrice: 5000000000, // 5 gwei
       verify: {
         etherscan: {
           apiUrl: getExplorerUrl("bscTestnet"),
@@ -377,6 +377,11 @@ const config: HardhatUserConfig = {
         },
       },
       blockGasLimit: 140000000,
+      deploy: ["deploy/"],
+      // hardhat-deploy settings to wait for confirmations
+      live: true,
+      saveDeployments: true,
+      waitConfirmations: 2, // Wait for 2 block confirmations before proceeding
     },
   },
   // hardhat-deploy has issues with some contracts
