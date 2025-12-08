@@ -65,6 +65,7 @@ export default async function (hre: HardhatRuntimeEnvironment): Promise<RiskOrac
     arbitrumSepolia: {
       riskOracle: "0x48b67764dBB6B8fc2A0c3987ed3819e543212Bc3",
     },
+    bscTestnet: {},
   };
 
   const riskOracleConfig: RiskOracleConfig = config[hre.network.name];

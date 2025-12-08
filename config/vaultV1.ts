@@ -23,6 +23,7 @@ export default async function (hre: HardhatRuntimeEnvironment): Promise<VaultV1C
       vaultV1: "To be added",
       gmx: "To be added",
     },
+    bscTestnet: {},
   };
 
   const vaultV1Config: VaultV1Config = config[hre.network.name];
