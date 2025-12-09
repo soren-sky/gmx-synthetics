@@ -52,7 +52,7 @@ const func = async ({ deployments, getNamedAccounts, gmx }: HardhatRuntimeEnviro
 
   log("GLV address: %s", glvAddress);
 
-  // Calculate market addresses
+  // Calculate market addresses - must match the markets configured in config/markets.ts
   // BNB/USD market - WBNB as index and long, USDC as short
   const bnbUsdMarketAddress = getMarketTokenAddress(
     wbnb.address,
@@ -64,7 +64,7 @@ const func = async ({ deployments, getNamedAccounts, gmx }: HardhatRuntimeEnviro
     dataStore.address
   );
 
-  // BTC/USD market - BTCB as index, WBNB as long, USDC as short
+  // BTC/USD market - BTCB as index, WBNB as long, USDC as short (Synthetic Market for GLV)
   const btcUsdMarketAddress = getMarketTokenAddress(
     btcb.address,
     wbnb.address,
@@ -75,7 +75,7 @@ const func = async ({ deployments, getNamedAccounts, gmx }: HardhatRuntimeEnviro
     dataStore.address
   );
 
-  // ETH/USD market - ETH as index, WBNB as long, USDC as short
+  // ETH/USD market - ETH as index, WBNB as long, USDC as short (Synthetic Market for GLV)
   const ethUsdMarketAddress = getMarketTokenAddress(
     eth.address,
     wbnb.address,
