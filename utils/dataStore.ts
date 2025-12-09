@@ -1,6 +1,6 @@
 import hre from "hardhat";
 import { BigNumber } from "ethers";
-import { signalHoldingAddressIfDifferent } from "./timelock";
+import { executeWithRetry } from "./deploy";
 
 export async function setUintIfDifferent(key: string, value: BigNumber | string | number, label?: string) {
   await setIfDifferent("uint", key, value, {
@@ -55,7 +55,12 @@ async function setIfDifferent(
   const currentValue: string = await read("DataStore", getMethod, key);
   if (compare ? !compare(currentValue, value) : currentValue != value) {
     log("setting %s %s (%s) to %s, prev: %s", type, label || "", key, value.toString(), currentValue.toString());
-    await execute("DataStore", { from: deployer, log: true, waitConfirmations: 2 }, setMethod, key, value);
+
+    await executeWithRetry(
+      () => execute("DataStore", { from: deployer, log: true, waitConfirmations: 2 }, setMethod, key, value),
+      `setIfDifferent ${label || key}`,
+      log
+    );
   } else {
     log("skipping %s %s (%s) as it is already set to %s", type, label, key, value.toString());
   }

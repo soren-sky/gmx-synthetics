@@ -5,32 +5,79 @@ import path from "path";
 import { findFile, readJsonFile, searchDirectory } from "./file";
 
 // Nonce error retry configuration
-const NONCE_RETRY_CONFIG = {
+export const NONCE_RETRY_CONFIG = {
   maxRetries: 5,
   baseDelayMs: 3000,
   maxDelayMs: 30000,
 };
 
 // Check if error is a nonce-related error
-function isNonceError(error: any): boolean {
+export function isNonceError(error: any): boolean {
   const errorMessage = error?.message || error?.toString() || "";
   const noncePatterns = [
     /nonce.*too low/i,
     /nonce.*already.*used/i,
     /NONCE_EXPIRED/i,
     /replacement transaction underpriced/i,
+    /REPLACEMENT_UNDERPRICED/i,
     /transaction.*underpriced/i,
     /already known/i,
     /nonce.*mismatch/i,
+    /replacement fee too low/i,
   ];
   return noncePatterns.some((pattern) => pattern.test(errorMessage));
 }
 
 // Wait with exponential backoff
-async function waitWithBackoff(attempt: number): Promise<void> {
+export async function waitWithBackoff(attempt: number, log?: (message: string) => void): Promise<void> {
   const delay = Math.min(NONCE_RETRY_CONFIG.baseDelayMs * Math.pow(2, attempt), NONCE_RETRY_CONFIG.maxDelayMs);
-  console.log(`  Waiting ${delay}ms before retry (attempt ${attempt + 1}/${NONCE_RETRY_CONFIG.maxRetries})...`);
+  const message = `  Waiting ${delay}ms before retry (attempt ${attempt + 1}/${NONCE_RETRY_CONFIG.maxRetries})...`;
+  if (log) {
+    log(message);
+  } else {
+    console.log(message);
+  }
   await new Promise((resolve) => setTimeout(resolve, delay));
+}
+
+// Execute a function with nonce error retry logic
+export async function executeWithRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  log?: (message: string) => void
+): Promise<T> {
+  let lastError: any;
+  for (let attempt = 0; attempt < NONCE_RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastError = e;
+
+      if (isNonceError(e)) {
+        const errorMsg = `  Nonce error detected for ${label}: ${e.message || e}`;
+        if (log) {
+          log(errorMsg);
+        } else {
+          console.log(errorMsg);
+        }
+
+        if (attempt < NONCE_RETRY_CONFIG.maxRetries - 1) {
+          await waitWithBackoff(attempt, log);
+          const retryMsg = `  Retrying ${label}...`;
+          if (log) {
+            log(retryMsg);
+          } else {
+            console.log(retryMsg);
+          }
+          continue;
+        }
+      }
+
+      throw e;
+    }
+  }
+
+  throw new Error(`${label} failed after ${NONCE_RETRY_CONFIG.maxRetries} retries: ${lastError}`);
 }
 
 export async function deployContract(name, args, contractOptions = {}) {
