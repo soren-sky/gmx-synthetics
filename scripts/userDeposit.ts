@@ -95,8 +95,10 @@ async function main() {
     ? bigNumberify(process.env.SHORT_TOKEN_AMOUNT)
     : expandDecimals(10, 6);
 
-  // Execution fee: 0.001 BNB
-  const executionFee = expandDecimals(1, 15);
+  // Execution fee: 0.02 BNB (must be >= estimated gas fee from DataStore)
+  // GMX calculates: estimatedGasFeeBaseAmount + estimatedGasPerOraclePrice * numPrices
+  // On BSC testnet: ~600000 + 250000 * numPrices, with multiplier
+  const executionFee = expandDecimals(2, 16); // 0.02 BNB
 
   console.log("\nDeposit amounts:");
   console.log("  Long token amount:", longTokenAmount.toString());
