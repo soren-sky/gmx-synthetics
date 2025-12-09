@@ -5170,7 +5170,12 @@ const config: {
     },
   ],
   bscTestnet: [
-    // BTC/USD market - BTCB as index and long collateral (Backed Market)
+    // ============================================
+    // Standard Markets (Backed by native tokens)
+    // indexToken == longToken
+    // ============================================
+
+    // BTC/USD market - BTCB as index and long collateral (Standard Market)
     {
       tokens: { indexToken: "BTCB", longToken: "BTCB", shortToken: "USDC" },
       maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
@@ -5178,7 +5183,7 @@ const config: {
       maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
       maxOpenInterest: decimalToFloat(100_000_000),
     },
-    // ETH/USD market - ETH as index and long collateral (Backed Market)
+    // ETH/USD market - ETH as index and long collateral (Standard Market)
     {
       tokens: { indexToken: "ETH", longToken: "ETH", shortToken: "USDC" },
       maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
@@ -5186,7 +5191,7 @@ const config: {
       maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
       maxOpenInterest: decimalToFloat(100_000_000),
     },
-    // BNB/USD market - WBNB as index and long collateral (Backed Market)
+    // BNB/USD market - WBNB as index and long collateral (Standard Market)
     {
       tokens: { indexToken: "WBNB", longToken: "WBNB", shortToken: "USDC" },
       maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
@@ -5194,23 +5199,7 @@ const config: {
       maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
       maxOpenInterest: decimalToFloat(100_000_000),
     },
-    // BTC/USD market - BTCB as index, WBNB as long collateral (Synthetic Market for GLV)
-    {
-      tokens: { indexToken: "BTCB", longToken: "WBNB", shortToken: "USDC" },
-      maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
-      maxShortTokenPoolAmount: expandDecimals(1_000_000, 18),
-      maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
-      maxOpenInterest: decimalToFloat(100_000_000),
-    },
-    // ETH/USD market - ETH as index, WBNB as long collateral (Synthetic Market for GLV)
-    {
-      tokens: { indexToken: "ETH", longToken: "WBNB", shortToken: "USDC" },
-      maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
-      maxShortTokenPoolAmount: expandDecimals(1_000_000, 18),
-      maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
-      maxOpenInterest: decimalToFloat(100_000_000),
-    },
-    // BNB/USDT market - WBNB as index and long collateral (Backed Market)
+    // BNB/USDT market - WBNB as index and long collateral (Standard Market)
     {
       tokens: { indexToken: "WBNB", longToken: "WBNB", shortToken: "USDT" },
       maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
@@ -5218,6 +5207,25 @@ const config: {
       maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
       maxOpenInterest: decimalToFloat(100_000_000),
     },
+
+    // ============================================
+    // Synthetic Markets (No native token on BSC)
+    // indexToken != longToken, backed by WBNB
+    // ============================================
+
+    // DOGE/USD market - Synthetic (DOGE has no native token on BSC, use WBNB as collateral)
+    {
+      tokens: { indexToken: "DOGE", longToken: "WBNB", shortToken: "USDC" },
+      maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
+      maxShortTokenPoolAmount: expandDecimals(1_000_000, 18),
+      maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
+      maxOpenInterest: decimalToFloat(100_000_000),
+    },
+
+    // ============================================
+    // Swap-only Markets
+    // ============================================
+
     // Swap-only market - WBNB/USDC
     {
       tokens: { longToken: "WBNB", shortToken: "USDC" },

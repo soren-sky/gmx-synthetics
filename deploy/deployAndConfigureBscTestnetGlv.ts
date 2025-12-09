@@ -13,8 +13,7 @@ const func = async ({ deployments, getNamedAccounts, gmx }: HardhatRuntimeEnviro
 
   const wbnb = tokens.WBNB;
   const usdc = tokens.USDC;
-  const btcb = tokens.BTCB;
-  const eth = tokens.ETH;
+  const doge = tokens.DOGE;
   const glvType = ethers.constants.HashZero;
 
   // Create GLV for WBNB-USDC markets
@@ -53,7 +52,9 @@ const func = async ({ deployments, getNamedAccounts, gmx }: HardhatRuntimeEnviro
   log("GLV address: %s", glvAddress);
 
   // Calculate market addresses - must match the markets configured in config/markets.ts
-  // BNB/USD market - WBNB as index and long, USDC as short
+  // All markets in this GLV must use WBNB as longToken and USDC as shortToken
+
+  // BNB/USD market - WBNB as index and long, USDC as short (Standard Market)
   const bnbUsdMarketAddress = getMarketTokenAddress(
     wbnb.address,
     wbnb.address,
@@ -64,20 +65,9 @@ const func = async ({ deployments, getNamedAccounts, gmx }: HardhatRuntimeEnviro
     dataStore.address
   );
 
-  // BTC/USD market - BTCB as index, WBNB as long, USDC as short (Synthetic Market for GLV)
-  const btcUsdMarketAddress = getMarketTokenAddress(
-    btcb.address,
-    wbnb.address,
-    usdc.address,
-    DEFAULT_MARKET_TYPE,
-    marketFactory.address,
-    roleStore.address,
-    dataStore.address
-  );
-
-  // ETH/USD market - ETH as index, WBNB as long, USDC as short (Synthetic Market for GLV)
-  const ethUsdMarketAddress = getMarketTokenAddress(
-    eth.address,
+  // DOGE/USD market - DOGE as index, WBNB as long, USDC as short (Synthetic Market)
+  const dogeUsdMarketAddress = getMarketTokenAddress(
+    doge.address,
     wbnb.address,
     usdc.address,
     DEFAULT_MARKET_TYPE,
@@ -87,8 +77,7 @@ const func = async ({ deployments, getNamedAccounts, gmx }: HardhatRuntimeEnviro
   );
 
   log("BNB/USD market address: %s", bnbUsdMarketAddress);
-  log("BTC/USD market address: %s", btcUsdMarketAddress);
-  log("ETH/USD market address: %s", ethUsdMarketAddress);
+  log("DOGE/USD market address: %s", dogeUsdMarketAddress);
 
   // Set token transfer gas limit for GLV
   log("Setting token transfer gas limit for GLV...");
@@ -100,7 +89,7 @@ const func = async ({ deployments, getNamedAccounts, gmx }: HardhatRuntimeEnviro
     200_000
   );
 
-  // Add markets to GLV
+  // Add markets to GLV (all must have WBNB as longToken and USDC as shortToken)
   log("Adding BNB/USD market to GLV...");
   await execute(
     "GlvShiftHandler",
@@ -110,22 +99,13 @@ const func = async ({ deployments, getNamedAccounts, gmx }: HardhatRuntimeEnviro
     bnbUsdMarketAddress
   );
 
-  log("Adding BTC/USD market to GLV...");
+  log("Adding DOGE/USD market to GLV...");
   await execute(
     "GlvShiftHandler",
     { from: deployer, log: true, waitConfirmations: 2 },
     "addMarketToGlv",
     glvAddress,
-    btcUsdMarketAddress
-  );
-
-  log("Adding ETH/USD market to GLV...");
-  await execute(
-    "GlvShiftHandler",
-    { from: deployer, log: true, waitConfirmations: 2 },
-    "addMarketToGlv",
-    glvAddress,
-    ethUsdMarketAddress
+    dogeUsdMarketAddress
   );
 
   log("GLV deployment and configuration complete!");

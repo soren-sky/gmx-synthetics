@@ -1842,6 +1842,13 @@ const config: {
       deploy: true,
       oracleProvider: "gmOracle",
     },
+    DOGE: {
+      decimals: 8,
+      transferGasLimit: 200 * 1000,
+      deploy: true,
+      synthetic: true,
+      oracleProvider: "gmOracle",
+    },
   },
 };
 
