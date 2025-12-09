@@ -1816,26 +1816,31 @@ const config: {
       wrappedNative: true,
       decimals: 18,
       transferGasLimit: 200 * 1000,
+      oracleProvider: "gmOracle",
     },
     USDT: {
       decimals: 18,
       transferGasLimit: 200 * 1000,
       deploy: true,
+      oracleProvider: "gmOracle",
     },
     USDC: {
       decimals: 18,
       transferGasLimit: 200 * 1000,
       deploy: true,
+      oracleProvider: "gmOracle",
     },
     BTCB: {
       decimals: 18,
       transferGasLimit: 200 * 1000,
       deploy: true,
+      oracleProvider: "gmOracle",
     },
     ETH: {
       decimals: 18,
       transferGasLimit: 200 * 1000,
       deploy: true,
+      oracleProvider: "gmOracle",
     },
   },
 };

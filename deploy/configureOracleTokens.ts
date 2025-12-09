@@ -6,13 +6,31 @@ import { OracleProvider } from "../config/oracle";
 
 const func = async ({ gmx, deployments, network }: HardhatRuntimeEnvironment) => {
   const tokens = await gmx.getTokens();
-  const { get } = deployments;
+  const { get, getOrNull } = deployments;
 
   const defaultOracleProvider: OracleProvider = network.name === "hardhat" ? "gmOracle" : "chainlinkDataStream";
-  const oracleProviders = {
-    gmOracle: (await get("GmOracleProvider")).address,
-    chainlinkDataStream: (await get("ChainlinkDataStreamProvider")).address,
-  };
+
+  // Check which oracle providers are actually needed
+  const neededProviders = new Set<string>();
+  for (const tokenSymbol of Object.keys(tokens)) {
+    const token = tokens[tokenSymbol];
+    const providerKey = token.oracleProvider || defaultOracleProvider;
+    neededProviders.add(providerKey);
+  }
+
+  // Only load providers that are needed
+  const oracleProviders: { [key: string]: string } = {};
+  if (neededProviders.has("gmOracle")) {
+    oracleProviders.gmOracle = (await get("GmOracleProvider")).address;
+  }
+  if (neededProviders.has("chainlinkDataStream")) {
+    const chainlinkProvider = await getOrNull("ChainlinkDataStreamProvider");
+    if (chainlinkProvider) {
+      oracleProviders.chainlinkDataStream = chainlinkProvider.address;
+    } else {
+      console.log("WARN: ChainlinkDataStreamProvider not deployed, skipping tokens that need it");
+    }
+  }
 
   const oracle = await get("Oracle");
 
@@ -58,7 +76,8 @@ const func = async ({ gmx, deployments, network }: HardhatRuntimeEnvironment) =>
   }
 };
 
-func.dependencies = ["Tokens", "PriceFeeds", "DataStore", "GmOracleProvider", "ChainlinkDataStreamProvider"];
+// Note: ChainlinkDataStreamProvider is loaded dynamically only when needed
+func.dependencies = ["Tokens", "PriceFeeds", "DataStore", "GmOracleProvider"];
 func.tags = ["ConfigureOracleTokens"];
 
 export default func;
