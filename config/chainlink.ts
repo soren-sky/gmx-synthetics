@@ -22,6 +22,9 @@ export default async function (hre: HardhatRuntimeEnvironment): Promise<Chainlin
     arbitrumSepolia: {
       flags: "0x0000000000000000000000000000000000000000",
     },
+    bscTestnet: {
+      flags: "0x0000000000000000000000000000000000000000",
+    },
   };
 
   const chainlinkFlagsConfig: ChainlinkFlagsConfig = config[hre.network.name];

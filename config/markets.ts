@@ -5169,6 +5169,56 @@ const config: {
       tokens: { indexToken: "SOL", longToken: "WETH", shortToken: "USDC" },
     },
   ],
+  bscTestnet: [
+    // BTC/USD market - BTCB as index, WBNB as long collateral, USDC as short collateral
+    {
+      tokens: { indexToken: "BTCB", longToken: "WBNB", shortToken: "USDC" },
+      maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
+      maxShortTokenPoolAmount: expandDecimals(1_000_000, 18),
+      maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
+      maxOpenInterest: decimalToFloat(100_000_000),
+    },
+    // ETH/USD market - ETH as index, WBNB as long collateral, USDC as short collateral
+    {
+      tokens: { indexToken: "ETH", longToken: "WBNB", shortToken: "USDC" },
+      maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
+      maxShortTokenPoolAmount: expandDecimals(1_000_000, 18),
+      maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
+      maxOpenInterest: decimalToFloat(100_000_000),
+    },
+    // BNB/USD market - WBNB as index and long collateral, USDC as short collateral
+    {
+      tokens: { indexToken: "WBNB", longToken: "WBNB", shortToken: "USDC" },
+      maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
+      maxShortTokenPoolAmount: expandDecimals(1_000_000, 18),
+      maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
+      maxOpenInterest: decimalToFloat(100_000_000),
+    },
+    // BNB/USDT market - WBNB as index and long collateral, USDT as short collateral
+    {
+      tokens: { indexToken: "WBNB", longToken: "WBNB", shortToken: "USDT" },
+      maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
+      maxShortTokenPoolAmount: expandDecimals(1_000_000, 18),
+      maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
+      maxOpenInterest: decimalToFloat(100_000_000),
+    },
+    // Swap-only market - WBNB/USDC
+    {
+      tokens: { longToken: "WBNB", shortToken: "USDC" },
+      swapOnly: true,
+      maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
+      maxShortTokenPoolAmount: expandDecimals(1_000_000, 18),
+      maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
+    },
+    // Swap-only market - WBNB/USDT
+    {
+      tokens: { longToken: "WBNB", shortToken: "USDT" },
+      swapOnly: true,
+      maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
+      maxShortTokenPoolAmount: expandDecimals(1_000_000, 18),
+      maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
+    },
+  ],
 };
 
 function fillLongShortValues(market, key, longKey, shortKey) {
