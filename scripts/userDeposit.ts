@@ -11,40 +11,57 @@ const { ethers, deployments } = hre as any;
  *
  * 环境变量:
  *   MARKET_ADDRESS: Market 地址（必填）
- *   LONG_TOKEN_AMOUNT: Long token 数量（可选，默认 0.001 ETH）
+ *   LONG_TOKEN_AMOUNT: Long token 数量（可选，默认 0.001）
  *   SHORT_TOKEN_AMOUNT: Short token 数量（可选，默认 10 USDC）
+ *
+ * 脚本会自动从 Market 获取正确的 long/short token 地址
  */
 
-async function getWntAddress(): Promise<string> {
-  // 尝试从环境变量或部署获取 WNT 地址
-  if (process.env.WNT_ADDRESS) {
-    return process.env.WNT_ADDRESS;
-  }
-
-  // 尝试获取已部署的 WETH/WNT
-  try {
-    const weth = await deployments.get("WETH");
-    return weth.address;
-  } catch {
-    try {
-      const eth = await deployments.get("ETH");
-      return eth.address;
-    } catch {
-      throw new Error("WNT/WETH not found in deployments. Set WNT_ADDRESS env var.");
-    }
-  }
+// Market info structure from Reader contract
+interface MarketInfo {
+  market: {
+    marketToken: string;
+    indexToken: string;
+    longToken: string;
+    shortToken: string;
+  };
 }
 
-async function getUsdcAddress(): Promise<string> {
-  if (process.env.USDC_ADDRESS) {
-    return process.env.USDC_ADDRESS;
+async function getMarketTokens(
+  marketAddress: string
+): Promise<{ longToken: string; shortToken: string; indexToken: string }> {
+  const reader = await ethers.getContract("Reader");
+  const dataStore = await ethers.getContract("DataStore");
+
+  // Call Reader.getMarket to get market info
+  const marketInfo = await reader.getMarket(dataStore.address, marketAddress);
+
+  console.log("\nMarket info from chain:");
+  console.log("  Market Token:", marketInfo.marketToken);
+  console.log("  Index Token:", marketInfo.indexToken);
+  console.log("  Long Token:", marketInfo.longToken);
+  console.log("  Short Token:", marketInfo.shortToken);
+
+  return {
+    longToken: marketInfo.longToken,
+    shortToken: marketInfo.shortToken,
+    indexToken: marketInfo.indexToken,
+  };
+}
+
+async function getWbnbAddress(): Promise<string> {
+  // BSC Testnet WBNB address
+  if (process.env.WBNB_ADDRESS) {
+    return process.env.WBNB_ADDRESS;
   }
 
+  // Try to get from deployments
   try {
-    const usdc = await deployments.get("USDC");
-    return usdc.address;
+    const wbnb = await deployments.get("WBNB");
+    return wbnb.address;
   } catch {
-    throw new Error("USDC not found in deployments. Set USDC_ADDRESS env var.");
+    // Fallback to BSC Testnet WBNB address
+    return "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd";
   }
 }
 
@@ -59,16 +76,10 @@ async function main() {
   const depositVault = await ethers.getContract("DepositVault");
   const dataStore = await ethers.getContract("DataStore");
 
-  // 获取 token 地址
-  const wntAddress = await getWntAddress();
-  const usdcAddress = await getUsdcAddress();
-
   console.log("\nContract addresses:");
   console.log("  ExchangeRouter:", exchangeRouter.address);
   console.log("  Router:", router.address);
   console.log("  DepositVault:", depositVault.address);
-  console.log("  WNT:", wntAddress);
-  console.log("  USDC:", usdcAddress);
 
   // 获取 Market 地址
   const marketAddress = process.env.MARKET_ADDRESS;
@@ -80,17 +91,34 @@ async function main() {
   }
   console.log("  Market:", marketAddress);
 
+  // 从 Market 获取正确的 long/short token 地址
+  const marketTokens = await getMarketTokens(marketAddress);
+  const longTokenAddress = marketTokens.longToken;
+  const shortTokenAddress = marketTokens.shortToken;
+
+  console.log("\nUsing tokens from market:");
+  console.log("  Long Token:", longTokenAddress);
+  console.log("  Short Token:", shortTokenAddress);
+
+  // 获取 WBNB 地址用于 native token 操作
+  const wbnbAddress = await getWbnbAddress();
+  console.log("  WBNB:", wbnbAddress);
+
+  // 检查 long token 是否是 WBNB (用于判断是否需要 wrap BNB)
+  const isLongTokenWbnb = longTokenAddress.toLowerCase() === wbnbAddress.toLowerCase();
+  console.log("  Long token is WBNB:", isLongTokenWbnb);
+
   // 获取 token 合约实例
-  const wnt = await ethers.getContractAt("MintableToken", wntAddress);
-  const usdc: MintableToken = await ethers.getContractAt("MintableToken", usdcAddress);
+  const longToken = await ethers.getContractAt("MintableToken", longTokenAddress);
+  const shortToken: MintableToken = await ethers.getContractAt("MintableToken", shortTokenAddress);
 
   // 设置金额
-  // Long token: 默认 0.001 ETH (1e15 wei)
+  // Long token: 默认 0.001 (18 decimals)
   const longTokenAmount = process.env.LONG_TOKEN_AMOUNT
     ? bigNumberify(process.env.LONG_TOKEN_AMOUNT)
     : expandDecimals(1, 15);
 
-  // Short token: 默认 10 USDC (10 * 1e6)
+  // Short token: 默认 10 USDC (6 decimals)
   const shortTokenAmount = process.env.SHORT_TOKEN_AMOUNT
     ? bigNumberify(process.env.SHORT_TOKEN_AMOUNT)
     : expandDecimals(10, 6);
@@ -105,57 +133,74 @@ async function main() {
   console.log("  Short token amount:", shortTokenAmount.toString());
   console.log("  Execution fee:", executionFee.toString());
 
-  // 检查和 mint WNT (如果需要)
-  const wntBalance = await wnt.balanceOf(wallet.address);
-  console.log("\nCurrent WNT balance:", wntBalance.toString());
+  // 检查和获取 long token (如果是 WBNB，需要 wrap BNB)
+  const longTokenBalance = await longToken.balanceOf(wallet.address);
+  console.log("\nCurrent long token balance:", longTokenBalance.toString());
 
-  if (wntBalance.lt(longTokenAmount)) {
-    console.log("Wrapping BNB to WNT...");
-    const wntContract = await ethers.getContractAt("WETH9", wntAddress);
-    const depositTx = await wntContract.deposit({ value: longTokenAmount.add(executionFee) });
+  if (isLongTokenWbnb && longTokenBalance.lt(longTokenAmount)) {
+    console.log("Wrapping BNB to WBNB...");
+    // Use minimal WBNB ABI for deposit function
+    const wbnbAbi = [
+      "function deposit() external payable",
+      "function withdraw(uint256 amount) external",
+      "function balanceOf(address account) external view returns (uint256)",
+    ];
+    const wbnbContract = new ethers.Contract(wbnbAddress, wbnbAbi, wallet);
+    const depositTx = await wbnbContract.deposit({ value: longTokenAmount.add(executionFee) });
     await depositTx.wait();
-    console.log("WNT deposit complete");
+    console.log("WBNB deposit complete");
+  } else if (!isLongTokenWbnb && longTokenBalance.lt(longTokenAmount)) {
+    console.log("Minting long token for testing...");
+    try {
+      const mintTx = await longToken.mint(wallet.address, longTokenAmount);
+      await mintTx.wait();
+      console.log("Long token minted");
+    } catch (e) {
+      console.log("Note: Could not mint long token (may not be a MintableToken)");
+    }
   }
 
-  // 检查和 mint USDC (用于测试网)
-  const usdcBalance = await usdc.balanceOf(wallet.address);
-  console.log("Current USDC balance:", usdcBalance.toString());
+  // 检查和 mint short token (用于测试网)
+  const shortTokenBalance = await shortToken.balanceOf(wallet.address);
+  console.log("Current short token balance:", shortTokenBalance.toString());
 
-  if (usdcBalance.lt(shortTokenAmount)) {
-    console.log("Minting USDC for testing...");
+  if (shortTokenBalance.lt(shortTokenAmount)) {
+    console.log("Minting short token for testing...");
     try {
-      const mintTx = await usdc.mint(wallet.address, shortTokenAmount);
+      const mintTx = await shortToken.mint(wallet.address, shortTokenAmount);
       await mintTx.wait();
-      console.log("USDC minted");
+      console.log("Short token minted");
     } catch (e) {
-      console.log("Note: Could not mint USDC (may not be a MintableToken)");
+      console.log("Note: Could not mint short token (may not be a MintableToken)");
     }
   }
 
   // 授权 Router
-  const wntAllowance = await wnt.allowance(wallet.address, router.address);
-  if (wntAllowance.lt(longTokenAmount.add(executionFee))) {
-    console.log("\nApproving WNT...");
-    const approveTx = await wnt.approve(router.address, ethers.constants.MaxUint256);
+  const longTokenAllowance = await longToken.allowance(wallet.address, router.address);
+  if (longTokenAllowance.lt(longTokenAmount.add(isLongTokenWbnb ? executionFee : bigNumberify(0)))) {
+    console.log("\nApproving long token...");
+    const approveTx = await longToken.approve(router.address, ethers.constants.MaxUint256);
     await approveTx.wait();
   }
 
-  const usdcAllowance = await usdc.allowance(wallet.address, router.address);
-  if (usdcAllowance.lt(shortTokenAmount)) {
-    console.log("Approving USDC...");
-    const approveTx = await usdc.approve(router.address, ethers.constants.MaxUint256);
+  const shortTokenAllowance = await shortToken.allowance(wallet.address, router.address);
+  if (shortTokenAllowance.lt(shortTokenAmount)) {
+    console.log("Approving short token...");
+    const approveTx = await shortToken.approve(router.address, ethers.constants.MaxUint256);
     await approveTx.wait();
   }
 
   // 构建 Deposit 参数
+  // IMPORTANT: initialLongToken/initialShortToken 必须与 market 的 longToken/shortToken 匹配
+  // 否则会出现 InvalidSwapOutputToken 错误
   const params: DepositUtils.CreateDepositParamsStruct = {
     addresses: {
       receiver: wallet.address,
       callbackContract: ethers.constants.AddressZero,
       market: marketAddress,
-      initialLongToken: wntAddress,
+      initialLongToken: longTokenAddress, // 使用 market 的 long token
       longTokenSwapPath: [],
-      initialShortToken: usdcAddress,
+      initialShortToken: shortTokenAddress, // 使用 market 的 short token
       shortTokenSwapPath: [],
       uiFeeReceiver: ethers.constants.AddressZero,
     },
@@ -170,17 +215,47 @@ async function main() {
   console.log("Params:", JSON.stringify(params, null, 2));
 
   // 使用 multicall 发送 deposit 请求
-  const multicallArgs = [
-    exchangeRouter.interface.encodeFunctionData("sendWnt", [depositVault.address, longTokenAmount.add(executionFee)]),
-    exchangeRouter.interface.encodeFunctionData("sendTokens", [usdcAddress, depositVault.address, shortTokenAmount]),
-    exchangeRouter.interface.encodeFunctionData("createDeposit", [params]),
-  ];
+  // 对于 WBNB market，需要使用 sendWnt 发送原生 BNB
+  const multicallArgs = [];
+
+  if (isLongTokenWbnb) {
+    // Long token 是 WBNB，使用 sendWnt 发送 BNB (会自动 wrap)
+    multicallArgs.push(
+      exchangeRouter.interface.encodeFunctionData("sendWnt", [depositVault.address, longTokenAmount.add(executionFee)])
+    );
+  } else {
+    // Long token 不是 WBNB，使用 sendTokens
+    multicallArgs.push(
+      exchangeRouter.interface.encodeFunctionData("sendTokens", [
+        longTokenAddress,
+        depositVault.address,
+        longTokenAmount,
+      ])
+    );
+    // 单独发送 execution fee (BNB)
+    multicallArgs.push(exchangeRouter.interface.encodeFunctionData("sendWnt", [depositVault.address, executionFee]));
+  }
+
+  // 发送 short token
+  multicallArgs.push(
+    exchangeRouter.interface.encodeFunctionData("sendTokens", [
+      shortTokenAddress,
+      depositVault.address,
+      shortTokenAmount,
+    ])
+  );
+
+  // 创建 deposit
+  multicallArgs.push(exchangeRouter.interface.encodeFunctionData("createDeposit", [params]));
+
+  // 计算需要发送的 BNB 总量
+  const totalBnbValue = isLongTokenWbnb ? longTokenAmount.add(executionFee) : executionFee;
 
   // 先执行 callStatic 检查
   console.log("\nSimulating transaction...");
   try {
     const result = await exchangeRouter.callStatic.multicall(multicallArgs, {
-      value: longTokenAmount.add(executionFee),
+      value: totalBnbValue,
       gasLimit: 8000000,
     });
     console.log("Simulation successful");
@@ -192,7 +267,7 @@ async function main() {
   // 执行实际交易
   console.log("\nSending transaction...");
   const tx = await exchangeRouter.multicall(multicallArgs, {
-    value: longTokenAmount.add(executionFee),
+    value: totalBnbValue,
     gasLimit: 8000000,
   });
 
