@@ -5170,23 +5170,23 @@ const config: {
     },
   ],
   bscTestnet: [
-    // BTC/USD market - BTCB as index, WBNB as long collateral, USDC as short collateral
+    // BTC/USD market - BTCB as index and long collateral (Backed Market)
     {
-      tokens: { indexToken: "BTCB", longToken: "WBNB", shortToken: "USDC" },
+      tokens: { indexToken: "BTCB", longToken: "BTCB", shortToken: "USDC" },
       maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
       maxShortTokenPoolAmount: expandDecimals(1_000_000, 18),
       maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
       maxOpenInterest: decimalToFloat(100_000_000),
     },
-    // ETH/USD market - ETH as index, WBNB as long collateral, USDC as short collateral
+    // ETH/USD market - ETH as index and long collateral (Backed Market)
     {
-      tokens: { indexToken: "ETH", longToken: "WBNB", shortToken: "USDC" },
+      tokens: { indexToken: "ETH", longToken: "ETH", shortToken: "USDC" },
       maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
       maxShortTokenPoolAmount: expandDecimals(1_000_000, 18),
       maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
       maxOpenInterest: decimalToFloat(100_000_000),
     },
-    // BNB/USD market - WBNB as index and long collateral, USDC as short collateral
+    // BNB/USD market - WBNB as index and long collateral (Backed Market)
     {
       tokens: { indexToken: "WBNB", longToken: "WBNB", shortToken: "USDC" },
       maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
@@ -5194,7 +5194,7 @@ const config: {
       maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
       maxOpenInterest: decimalToFloat(100_000_000),
     },
-    // BNB/USDT market - WBNB as index and long collateral, USDT as short collateral
+    // BNB/USDT market - WBNB as index and long collateral (Backed Market)
     {
       tokens: { indexToken: "WBNB", longToken: "WBNB", shortToken: "USDT" },
       maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
