@@ -139,7 +139,11 @@ export default async function (hre: HardhatRuntimeEnvironment): Promise<OracleCo
     },
 
     bscTestnet: {
-      signers: [],
+      // TEST ORACLE SIGNER - DO NOT USE IN PRODUCTION!
+      // This uses the deployer/keeper wallet as Oracle signer for testing purposes.
+      // In production, use a dedicated Oracle signer with proper key management.
+      // Address derived from private key: 2b260b201ba3f3a03ce10b22a1202a3c226d4acbd4ea703f09eeeefb178560fc
+      signers: ["0xCD694Bb0e8a51E02696cE074396B4212E01Ec079"],
       maxOraclePriceAge,
       maxAtomicOraclePriceAge,
       maxOracleTimestampRange,

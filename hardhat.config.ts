@@ -177,8 +177,8 @@ const getEnvAccounts = (chainName?: string) => {
   // 自动读取 account.txt 文件
   const accountTxtPaths = [
     "./account.txt",
-    "../scripts/contract-deployment/account.txt",
-    "../../scripts/contract-deployment/account.txt",
+    "../scripts/bsctest-contract-deployment/account.txt",
+    "../../scripts/bsctest-contract-deployment/account.txt",
   ];
 
   for (const accountPath of accountTxtPaths) {
