@@ -138,28 +138,28 @@ async function main() {
   console.log("  Long token is WNT:", isLongTokenWnt);
 
   // Parse parameters
-  // SIZE_USD: Position size in USD (default $200,000)
-  const sizeUsd = process.env.SIZE_USD ? parseInt(process.env.SIZE_USD) : 200000;
+  // SIZE_USD: Position size in USD (default $10 for small pools)
+  const sizeUsd = process.env.SIZE_USD ? parseInt(process.env.SIZE_USD) : 10;
   const sizeDeltaUsd = decimalToFloat(sizeUsd);
 
-  // COLLATERAL_AMOUNT: Collateral in long token units (default 10)
-  const collateralUnits = process.env.COLLATERAL_AMOUNT ? parseFloat(process.env.COLLATERAL_AMOUNT) : 10;
+  // COLLATERAL_AMOUNT: Collateral in long token units (default 0.0005 BTCB ~ $45)
+  const collateralUnits = process.env.COLLATERAL_AMOUNT ? parseFloat(process.env.COLLATERAL_AMOUNT) : 0.0005;
   // Use dynamic decimals from token contract
   const collateralAmount = ethers.utils.parseUnits(collateralUnits.toString(), longTokenDecimals);
 
   // Execution fee: 0.02 BNB
   const executionFee = expandDecimals(2, 16);
 
-  // Acceptable price: Set 2% above current price for slippage protection
-  // For LONG: max price we're willing to pay
-  const acceptablePrice = expandDecimals(5100, 12); // $5100 max (assuming ~$5000 ETH)
+  // Acceptable price: Set high to allow any price for market order
+  // For LONG: max price we're willing to pay (set very high for market orders)
+  const acceptablePrice = expandDecimals(200000, 12); // $200,000 max (works for BTC ~$90k)
 
   console.log("\nOrder Details:");
   console.log("  Order Type: MarketIncrease (Market Long)");
   console.log("  Direction: LONG");
   console.log("  Position Size:", sizeUsd.toLocaleString(), "USD");
   console.log("  Collateral:", collateralUnits, "tokens");
-  console.log("  Max Acceptable Price: $5,100");
+  console.log("  Max Acceptable Price: $200,000");
   console.log("  Execution Fee:", ethers.utils.formatEther(executionFee), "BNB");
 
   // Get long token contract
