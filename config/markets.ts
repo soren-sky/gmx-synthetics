@@ -298,8 +298,10 @@ const baseMarketConfig: Partial<BaseMarketConfig> = {
   atomicSwapFeeFactor: percentageToFloat("3.75%"),
   atomicWithdrawalFeeFactor: percentageToFloat("0.5%"),
 
-  negativeSwapImpactFactor: percentageToFloat("0.001%"),
-  positiveSwapImpactFactor: percentageToFloat("0.0005%"),
+  // NOTE: percentageToFloat("0.001%") = 1e25 is too high!
+  // Using exponentToFloat for reasonable impact factors (similar to Arbitrum values)
+  negativeSwapImpactFactor: exponentToFloat("1e-9"), // 1e21, was 1e25
+  positiveSwapImpactFactor: exponentToFloat("5e-10"), // 5e20, was 5e24
   swapImpactExponentFactor: exponentToFloat("2e0"), // 2
 
   minCollateralUsd: decimalToFloat(1, 0), // 1 USD
