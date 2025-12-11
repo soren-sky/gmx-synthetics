@@ -254,11 +254,23 @@ export default async function (hre: HardhatRuntimeEnvironment): Promise<RolesCon
     },
     bscTestnet: {
       CONTROLLER: { [deployer]: true },
-      ORDER_KEEPER: { [deployer]: true },
-      ADL_KEEPER: { [deployer]: true },
-      LIQUIDATION_KEEPER: { [deployer]: true },
+      ORDER_KEEPER: {
+        [deployer]: true,
+        "0xCD694Bb0e8a51E02696cE074396B4212E01Ec079": true, // Executor keeper
+      },
+      ADL_KEEPER: {
+        [deployer]: true,
+        "0xCD694Bb0e8a51E02696cE074396B4212E01Ec079": true, // Executor keeper
+      },
+      LIQUIDATION_KEEPER: {
+        [deployer]: true,
+        "0xCD694Bb0e8a51E02696cE074396B4212E01Ec079": true, // Executor keeper
+      },
       MARKET_KEEPER: { [deployer]: true },
-      FROZEN_ORDER_KEEPER: { [deployer]: true },
+      FROZEN_ORDER_KEEPER: {
+        [deployer]: true,
+        "0xCD694Bb0e8a51E02696cE074396B4212E01Ec079": true, // Executor keeper
+      },
       CONFIG_KEEPER: { [deployer]: true },
       LIMITED_CONFIG_KEEPER: { [deployer]: true },
       TIMELOCK_ADMIN: { [deployer]: true },
