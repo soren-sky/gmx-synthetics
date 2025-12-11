@@ -104,9 +104,11 @@ export default async function ({ network }: HardhatRuntimeEnvironment) {
     createGlvWithdrawalGasLimit: 5_000_000,
 
     singleSwapGasLimit: 1_000_000, // measured gas required for a swap in a market increase order: ~600,000
-    increaseOrderGasLimit: 3_900_000,
-    decreaseOrderGasLimit: 3_900_000,
-    swapOrderGasLimit: 3_400_000,
+    // NOTE: Reduced gas limits for BSC Testnet to lower execution fee requirements
+    // Original values were too high causing InsufficientExecutionFee errors
+    increaseOrderGasLimit: 500_000, // was 3_900_000
+    decreaseOrderGasLimit: 500_000, // was 3_900_000
+    swapOrderGasLimit: 500_000, // was 3_400_000
 
     glvPerMarketGasLimit: 100_000,
     glvDepositGasLimit: 2_000_000,
@@ -116,12 +118,14 @@ export default async function ({ network }: HardhatRuntimeEnvironment) {
     tokenTransferGasLimit: 200_000,
     nativeTokenTransferGasLimit: 50_000,
 
-    estimatedGasFeeBaseAmount: 600_000,
-    estimatedGasPerOraclePrice: 250_000,
+    // NOTE: Reduced estimated gas fee params for BSC Testnet
+    estimatedGasFeeBaseAmount: 100_000, // was 600_000
+    estimatedGasPerOraclePrice: 50_000, // was 250_000
     estimatedGasFeeMultiplierFactor: expandDecimals(1, 30), // 1x
 
-    executionGasFeeBaseAmount: 600_000,
-    executionGasPerOraclePrice: 250_000,
+    // NOTE: Reduced execution gas fee params for BSC Testnet
+    executionGasFeeBaseAmount: 100_000, // was 600_000
+    executionGasPerOraclePrice: 50_000, // was 250_000
     executionGasFeeMultiplierFactor: expandDecimals(1, 30), // 1x
 
     requestExpirationTime: 300,

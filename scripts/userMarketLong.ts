@@ -152,7 +152,8 @@ async function main() {
 
   // Acceptable price: Set high to allow any price for market order
   // For LONG: max price we're willing to pay (set very high for market orders)
-  const acceptablePrice = expandDecimals(200000, 12); // $200,000 max (works for BTC ~$90k)
+  // GMX V2 price format: price * 10^30 (decimalToFloat handles this)
+  const acceptablePrice = decimalToFloat(200000); // $200,000 max (works for BTC ~$90k)
 
   console.log("\nOrder Details:");
   console.log("  Order Type: MarketIncrease (Market Long)");
