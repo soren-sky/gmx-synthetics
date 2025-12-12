@@ -182,6 +182,29 @@ export default async function ({ network }: HardhatRuntimeEnvironment) {
         ],
       },
     ],
+    bscTestnet: [
+      {
+        name: "GMX Liquidity Vault [BTCB-USDC]",
+        symbol: "GLV [BTCB-USDC]",
+        longToken: "BTCB",
+        shortToken: "USDC",
+        shiftMaxPriceImpactFactor: percentageToFloat("0.1%"),
+        shiftMinInterval: 300, // 5 minutes
+        minTokensForFirstGlvDeposit: expandDecimals(1, 18),
+        markets: [
+          {
+            indexToken: "BTCB", // Market0: BTCB:BTCB:USDC
+            glvMaxMarketTokenBalanceAmount: expandDecimals(100_000, 18),
+            glvMaxMarketTokenBalanceUsd: expandDecimals(1_000_000, 30),
+          },
+          {
+            indexToken: "WBNB", // New Market: WBNB:BTCB:USDC
+            glvMaxMarketTokenBalanceAmount: expandDecimals(100_000, 18),
+            glvMaxMarketTokenBalanceUsd: expandDecimals(1_000_000, 30),
+          },
+        ],
+      },
+    ],
     botanix: [],
     arbitrumSepolia: [
       {

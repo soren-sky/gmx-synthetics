@@ -5223,6 +5223,14 @@ const config: {
       maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
       maxOpenInterest: decimalToFloat(100_000_000),
     },
+    // BNB/USD market - Synthetic (Index WBNB, backed by BTCB/USDC for Shift compatibility with Market0)
+    {
+      tokens: { indexToken: "WBNB", longToken: "BTCB", shortToken: "USDC" },
+      maxLongTokenPoolAmount: expandDecimals(1_000_000, 18),
+      maxShortTokenPoolAmount: expandDecimals(1_000_000, 18),
+      maxPoolUsdForDeposit: decimalToFloat(1_000_000_000),
+      maxOpenInterest: decimalToFloat(100_000_000),
+    },
 
     // ============================================
     // Swap-only Markets
