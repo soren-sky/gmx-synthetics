@@ -89,6 +89,17 @@ const func = async ({ deployments, getNamedAccounts, gmx }: HardhatRuntimeEnviro
     200_000
   );
 
+  // Set GLV_SHIFT_MAX_PRICE_IMPACT_FACTOR (1% = 1e16)
+  // This controls the maximum allowed price impact during GLV shift operations
+  log("Setting GLV_SHIFT_MAX_PRICE_IMPACT_FACTOR to 1%...");
+  await execute(
+    "DataStore",
+    { from: deployer, log: true, waitConfirmations: 2 },
+    "setUint",
+    keys.glvShiftMaxPriceImpactFactorKey(glvAddress),
+    ethers.utils.parseUnits("0.01", 18) // 1% = 1e16
+  );
+
   // Add markets to GLV (all must have WBNB as longToken and USDC as shortToken)
   log("Adding BNB/USD market to GLV...");
   await execute(
