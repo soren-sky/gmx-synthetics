@@ -89,15 +89,18 @@ const func = async ({ deployments, getNamedAccounts, gmx }: HardhatRuntimeEnviro
     200_000
   );
 
-  // Set GLV_SHIFT_MAX_PRICE_IMPACT_FACTOR (1% = 1e16)
-  // This controls the maximum allowed price impact during GLV shift operations
-  log("Setting GLV_SHIFT_MAX_PRICE_IMPACT_FACTOR to 1%...");
+  // Set GLV_SHIFT_MAX_PRICE_IMPACT_FACTOR
+  // GMX uses FLOAT_PRECISION = 1e30, so:
+  //   1% = 0.01 * 1e30 = 1e28
+  //   5% = 0.05 * 1e30 = 5e28
+  // We use 5% to allow reasonable shift operations on low-liquidity pools
+  log("Setting GLV_SHIFT_MAX_PRICE_IMPACT_FACTOR to 5%...");
   await execute(
     "DataStore",
     { from: deployer, log: true, waitConfirmations: 2 },
     "setUint",
     keys.glvShiftMaxPriceImpactFactorKey(glvAddress),
-    ethers.utils.parseUnits("0.01", 18) // 1% = 1e16
+    ethers.BigNumber.from("5").mul(ethers.BigNumber.from("10").pow(28)) // 5% = 5e28
   );
 
   // Add markets to GLV (all must have WBNB as longToken and USDC as shortToken)

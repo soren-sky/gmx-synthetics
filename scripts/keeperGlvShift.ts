@@ -193,26 +193,53 @@ async function main() {
     process.exit(1);
   }
 
-  // Check target market pool liquidity and estimate price impact
-  console.log("\n=== Checking Target Market Liquidity ===");
+  // Check BOTH source and target market liquidity
+  console.log("\n=== Checking Market Liquidity ===");
   const reader = await ethers.getContract("Reader");
 
-  // Get market info for toMarket
-  const toMarketInfo = await reader.getMarket(dataStore.address, toMarket);
-  console.log("  To Market Index Token:", toMarketInfo.indexToken);
-  console.log("  To Market Long Token:", toMarketInfo.longToken);
-  console.log("  To Market Short Token:", toMarketInfo.shortToken);
+  // Helper function to get pool USD value
+  async function getPoolUsdValue(market: string) {
+    const marketInfo = await reader.getMarket(dataStore.address, market);
+    const poolLong = await dataStore.getUint(keys.poolAmountKey(market, marketInfo.longToken));
+    const poolShort = await dataStore.getUint(keys.poolAmountKey(market, marketInfo.shortToken));
+    const shortTokenContract = await ethers.getContractAt("IERC20Metadata", marketInfo.shortToken);
+    const shortDecimals = await shortTokenContract.decimals();
+    const shortTokenMultiplier = ethers.BigNumber.from(10).pow(18 - shortDecimals);
+    const poolUsd = poolLong.mul(700).add(poolShort.mul(shortTokenMultiplier));
 
-  // Get pool amounts
-  const poolLongAmount = await dataStore.getUint(keys.poolAmountKey(toMarket, toMarketInfo.longToken));
-  const poolShortAmount = await dataStore.getUint(keys.poolAmountKey(toMarket, toMarketInfo.shortToken));
+    const gmToken = await ethers.getContractAt("MarketToken", market);
+    const gmSupply = await gmToken.totalSupply();
 
-  console.log("  Pool Long Amount:", ethers.utils.formatEther(poolLongAmount));
-  console.log("  Pool Short Amount:", ethers.utils.formatUnits(poolShortAmount, 6), "(USDC 6 decimals)");
+    return { poolLong, poolShort, poolUsd, gmSupply, marketInfo };
+  }
+
+  // Get source market info (CRITICAL - this is where the withdrawal happens!)
+  console.log("\n  --- Source Market (FROM) ---");
+  const fromMarketData = await getPoolUsdValue(fromMarket);
+  console.log("  Pool Long (WBNB):", ethers.utils.formatEther(fromMarketData.poolLong));
+  console.log("  Pool Short:", ethers.utils.formatEther(fromMarketData.poolShort));
+  console.log("  Pool USD:", ethers.utils.formatEther(fromMarketData.poolUsd));
+  console.log("  GM Supply:", ethers.utils.formatEther(fromMarketData.gmSupply));
+  console.log("  GLV's GM Balance:", ethers.utils.formatEther(fromMarketBalance.balance));
+
+  // Calculate what percentage of pool the GLV holds
+  const glvPoolPercent = fromMarketBalance.balance.mul(100).div(fromMarketData.gmSupply);
+  console.log("  GLV holds:", glvPoolPercent.toString(), "% of market's GM supply");
+
+  // Get target market info
+  console.log("\n  --- Target Market (TO) ---");
+  const toMarketData = await getPoolUsdValue(toMarket);
+  console.log("  Pool Long (WBNB):", ethers.utils.formatEther(toMarketData.poolLong));
+  console.log("  Pool Short:", ethers.utils.formatEther(toMarketData.poolShort));
+  console.log("  Pool USD:", ethers.utils.formatEther(toMarketData.poolUsd));
+  console.log("  GM Supply:", ethers.utils.formatEther(toMarketData.gmSupply));
 
   // Check GLV_SHIFT_MAX_PRICE_IMPACT_FACTOR
   const glvShiftMaxPriceImpactFactor = await dataStore.getUint(keys.glvShiftMaxPriceImpactFactorKey(glvToken));
-  console.log("  GLV_SHIFT_MAX_PRICE_IMPACT_FACTOR:", ethers.utils.formatUnits(glvShiftMaxPriceImpactFactor, 16), "%");
+  // GMX uses FLOAT_PRECISION = 1e30, so 1% = 1e28
+  const maxImpactPercentValue = (parseFloat(glvShiftMaxPriceImpactFactor.toString()) / 1e30) * 100;
+  console.log("\n  GLV_SHIFT_MAX_PRICE_IMPACT_FACTOR:", glvShiftMaxPriceImpactFactor.toString());
+  console.log("  = ", maxImpactPercentValue, "%");
 
   if (glvShiftMaxPriceImpactFactor.eq(0)) {
     console.error("\nError: GLV_SHIFT_MAX_PRICE_IMPACT_FACTOR is 0!");
@@ -220,24 +247,25 @@ async function main() {
     process.exit(1);
   }
 
+  // Check if source market has enough liquidity
+  if (fromMarketData.poolUsd.eq(0)) {
+    console.error("\n!!! ERROR: Source market has NO liquidity !!!");
+    console.error("Cannot withdraw GM tokens from an empty pool.");
+    process.exit(1);
+  }
+
   // Check if target market has liquidity
-  const hasLiquidity = poolLongAmount.gt(0) || poolShortAmount.gt(0);
-  if (!hasLiquidity) {
+  if (toMarketData.poolUsd.eq(0)) {
     console.error("\n!!! ERROR: Target market has NO liquidity !!!");
     console.error("GLV shift will fail with extreme price impact.");
     console.error("\nPlease add liquidity to target market first:");
     console.error("  make user-deposit-doge");
-    console.error("\nOr specify a different TO_MARKET with liquidity.");
     process.exit(1);
   }
 
-  // Estimate pool USD value (BNB ~$700, assuming short token is stablecoin)
-  // Get short token decimals
-  const shortTokenContract = await ethers.getContractAt("IERC20Metadata", toMarketInfo.shortToken);
-  const shortDecimals = await shortTokenContract.decimals();
-  const shortTokenMultiplier = ethers.BigNumber.from(10).pow(18 - shortDecimals);
-  const totalPoolUsd = poolLongAmount.mul(700).add(poolShortAmount.mul(shortTokenMultiplier));
-  console.log("  Estimated Pool USD (rough):", ethers.utils.formatEther(totalPoolUsd));
+  // The smaller pool determines the bottleneck
+  const totalPoolUsd = fromMarketData.poolUsd.lt(toMarketData.poolUsd) ? fromMarketData.poolUsd : toMarketData.poolUsd;
+  console.log("\n  Bottleneck Pool USD:", ethers.utils.formatEther(totalPoolUsd), "(smaller of source/target)");
 
   // Calculate shift amount
   let shiftAmount;
@@ -260,44 +288,53 @@ async function main() {
     process.exit(1);
   }
 
-  // Estimate price impact and auto-adjust if needed
-  // Price impact ≈ shiftAmount / poolUsd
-  // We want: shiftAmount / poolUsd < maxPriceImpactFactor
-  // So max safe shift = poolUsd * maxPriceImpactFactor
-  console.log("\n=== Price Impact Check ===");
-  const estimatedPriceImpact = shiftAmount.mul(ethers.utils.parseUnits("1", 18)).div(totalPoolUsd);
-  const estimatedPriceImpactPercent = parseFloat(ethers.utils.formatUnits(estimatedPriceImpact, 16));
-  const maxImpactPercent = parseFloat(ethers.utils.formatUnits(glvShiftMaxPriceImpactFactor, 16));
+  // Estimate price impact - GMX formula:
+  // priceImpact = (marketTokensUsd - receivedMarketTokensUsd) / marketTokensUsd
+  // In FLOAT_PRECISION (1e30): priceImpact * 1e30
+  console.log("\n=== Price Impact Estimation ===");
 
-  console.log("  Estimated Price Impact:", estimatedPriceImpactPercent.toFixed(2), "%");
-  console.log("  Max Allowed:", maxImpactPercent.toFixed(2), "%");
+  // Calculate the USD value of GM tokens being shifted
+  // GM value = (shiftAmount / gmSupply) * poolUsd
+  const shiftValueUsd = shiftAmount.mul(fromMarketData.poolUsd).div(fromMarketData.gmSupply);
+  console.log("  Shift Value (USD):", ethers.utils.formatEther(shiftValueUsd));
 
-  if (estimatedPriceImpact.gt(glvShiftMaxPriceImpactFactor)) {
-    console.log("\n⚠️  Price impact too high! Auto-adjusting shift amount...");
+  // The shift represents this percentage of source pool
+  const sourcePoolPercent =
+    (parseFloat(shiftValueUsd.toString()) / parseFloat(fromMarketData.poolUsd.toString())) * 100;
+  console.log("  % of Source Pool:", sourcePoolPercent.toFixed(2), "%");
 
-    // Calculate max safe shift amount: poolUsd * maxPriceImpactFactor * 0.9 (10% safety margin)
-    const maxSafeShift = totalPoolUsd
-      .mul(glvShiftMaxPriceImpactFactor)
-      .div(ethers.utils.parseUnits("1", 18))
-      .mul(90)
-      .div(100);
+  // Very rough estimation: assume ~20% of shift value is lost to price impact
+  // (This is conservative - actual depends on swap impact curves)
+  const estimatedLossPercent = Math.min(sourcePoolPercent * 0.5, 50); // Cap at 50%
+  console.log("  Estimated Loss:", estimatedLossPercent.toFixed(2), "%");
+  console.log("  Max Allowed:", maxImpactPercentValue, "%");
 
-    if (maxSafeShift.eq(0)) {
-      console.error("\n❌ Pool too small for any shift!");
-      console.error("Please add more liquidity to target market:");
-      console.error("  make user-deposit-doge");
-      process.exit(1);
-    }
+  if (estimatedLossPercent > maxImpactPercentValue) {
+    console.log("\n⚠️  Estimated price impact may exceed max allowed!");
+    console.log("  Reducing shift amount...");
+
+    // Calculate safe shift: max_impact% / (loss_rate * 100) * poolUsd
+    // loss_rate ≈ 0.5 (50% of pool% becomes loss%)
+    const safePoolPercent = maxImpactPercentValue / 0.5;
+    const maxSafeShift = fromMarketData.gmSupply.mul(Math.floor(safePoolPercent * 100)).div(10000);
 
     console.log("  Original shift:", ethers.utils.formatEther(shiftAmount), "GM");
-    console.log("  Max safe shift:", ethers.utils.formatEther(maxSafeShift), "GM");
+    console.log(
+      "  Max safe shift:",
+      ethers.utils.formatEther(maxSafeShift),
+      "GM (",
+      safePoolPercent.toFixed(2),
+      "% of supply)"
+    );
 
-    shiftAmount = maxSafeShift;
-
-    const newPriceImpact = shiftAmount.mul(ethers.utils.parseUnits("1", 18)).div(totalPoolUsd);
-    console.log("  New estimated impact:", parseFloat(ethers.utils.formatUnits(newPriceImpact, 16)).toFixed(2), "%");
+    if (maxSafeShift.lt(ethers.utils.parseEther("0.1"))) {
+      console.log("\n  Pool too small for safe shift with current max impact setting.");
+      console.log("  Proceeding anyway since max impact is now set to", maxImpactPercentValue, "%");
+    } else {
+      shiftAmount = maxSafeShift;
+    }
   } else {
-    console.log("  ✅ Price impact OK");
+    console.log("\n  ✅ Shift amount within estimated safe range");
   }
 
   console.log("\n=== GLV Shift Details ===");
