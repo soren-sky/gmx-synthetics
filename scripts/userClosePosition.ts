@@ -2,8 +2,28 @@ import hre from "hardhat";
 import { bigNumberify, expandDecimals, decimalToFloat } from "../utils/math";
 import { ExchangeRouter, MintableToken } from "../typechain-types";
 import { OrderUtils } from "../typechain-types/contracts/exchange/OrderHandler";
+import * as http from "http";
 
 const { ethers, deployments } = hre as any;
+
+// Keeper debug API configuration
+const KEEPER_API_URL = process.env.KEEPER_API_URL || "http://localhost:28080";
+
+// Simple HTTP GET request using native http module
+function httpGet(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    http
+      .get(url, (res) => {
+        let data = "";
+        res.on("data", (chunk) => {
+          data += chunk;
+        });
+        res.on("end", () => resolve(data));
+        res.on("error", reject);
+      })
+      .on("error", reject);
+  });
+}
 
 /**
  * User Close Position Script (Full Close)
@@ -96,6 +116,43 @@ function getPositionKey(account: string, market: string, collateralToken: string
   );
 }
 
+// Fetch position from keeper debug API
+interface KeeperPosition {
+  position_key: string;
+  account: string;
+  market: string;
+  collateral_token: string;
+  is_long: boolean;
+  size_in_usd: string;
+  size_in_tokens: string;
+  collateral_amount: string;
+  status: string;
+}
+
+async function getPositionFromKeeper(account: string, market: string, isLong: boolean): Promise<KeeperPosition | null> {
+  try {
+    const url = `${KEEPER_API_URL}/api/v1/bsc/positions?account=${account}&market=${market}&status=Active&limit=100`;
+    console.log("  Keeper API URL:", url);
+
+    const responseText = await httpGet(url);
+    const data = JSON.parse(responseText) as { count?: number; positions?: KeeperPosition[] };
+
+    if (!data.positions || data.positions.length === 0) {
+      console.log("  No positions found in keeper DB");
+      return null;
+    }
+
+    console.log("  Found", data.count || data.positions.length, "position(s) in keeper DB");
+
+    // Find matching position by direction
+    const position = data.positions.find((p: KeeperPosition) => p.is_long === isLong);
+    return position || null;
+  } catch (e: any) {
+    console.error("  Failed to fetch from keeper API:", e.message);
+    return null;
+  }
+}
+
 async function main() {
   const [wallet] = await ethers.getSigners();
   console.log("Wallet address:", wallet.address);
@@ -135,36 +192,55 @@ async function main() {
   const wntAddress = await getWntAddress();
   const isCollateralWnt = collateralTokenAddress.toLowerCase() === wntAddress.toLowerCase();
 
-  // Try to get current position size
-  const positionKey = getPositionKey(wallet.address, marketAddress, collateralTokenAddress, isLong);
-  console.log("  Position Key:", positionKey);
+  // Try to get current position from keeper API first
+  console.log("\n  Fetching position from keeper database...");
+  const keeperPosition = await getPositionFromKeeper(wallet.address, marketAddress, isLong);
 
   let sizeDeltaUsd;
   let positionSizeUsd = 0;
+  let positionKey: string;
 
-  try {
-    const position = await reader.getPosition(dataStore.address, positionKey);
-    positionSizeUsd = parseFloat(ethers.utils.formatUnits(position.sizeInUsd, 30));
-    console.log("\nCurrent Position:");
+  if (keeperPosition) {
+    // Use position data from keeper
+    positionKey = keeperPosition.position_key;
+    console.log("  Position Key:", positionKey);
+
+    // Parse size from keeper (stored as string with 30 decimals)
+    const sizeInUsdBN = ethers.BigNumber.from(keeperPosition.size_in_usd);
+    positionSizeUsd = parseFloat(ethers.utils.formatUnits(sizeInUsdBN, 30));
+
+    console.log("\nCurrent Position (from keeper DB):");
     console.log("  Size in USD:", positionSizeUsd.toLocaleString());
-    console.log("  Collateral:", ethers.utils.formatUnits(position.collateralAmount, collateralDecimals));
-    console.log("  Is Long:", position.isLong);
+    console.log("  Collateral:", ethers.utils.formatUnits(keeperPosition.collateral_amount, collateralDecimals));
+    console.log("  Is Long:", keeperPosition.is_long);
+    console.log("  Status:", keeperPosition.status);
 
-    if (position.sizeInUsd.eq(0)) {
-      console.error("\nError: No position found to close!");
-      console.log("Please open a position first using 'make user-market-long' or 'make user-market-short'");
+    if (sizeInUsdBN.eq(0)) {
+      console.error("\nError: Position size is zero!");
+      console.log("The position may have already been closed.");
       process.exit(1);
     }
 
     // Use full position size for closing
-    sizeDeltaUsd = position.sizeInUsd;
-  } catch (e) {
-    console.log("\nWarning: Could not fetch position from chain");
-    // Fall back to SIZE_USD parameter
-    const sizeUsd = process.env.SIZE_USD ? parseInt(process.env.SIZE_USD) : 200000;
-    sizeDeltaUsd = decimalToFloat(sizeUsd);
-    positionSizeUsd = sizeUsd;
-    console.log("Using SIZE_USD parameter:", sizeUsd.toLocaleString(), "USD");
+    sizeDeltaUsd = sizeInUsdBN;
+  } else {
+    // No position found in keeper DB
+    positionKey = getPositionKey(wallet.address, marketAddress, collateralTokenAddress, isLong);
+    console.error("\nError: No active position found in keeper database!");
+    console.error("\nDetails:");
+    console.error("  Account:", wallet.address);
+    console.error("  Market:", marketAddress);
+    console.error("  Direction:", isLong ? "LONG" : "SHORT");
+    console.error("  Position Key:", positionKey);
+    console.error("\nPossible causes:");
+    console.error("  - No position exists for this account/market/direction");
+    console.error("  - Position was already closed");
+    console.error("  - Keeper service is not running or not synced");
+    console.error("\nTip: Make sure the keeper service is running and has synced the position.");
+    console.error(
+      "     You can check positions at: " + KEEPER_API_URL + "/api/v1/bsc/positions?account=" + wallet.address
+    );
+    process.exit(1);
   }
 
   // Execution fee: 0.02 BNB
