@@ -69,7 +69,7 @@ async function getPositionFromKeeper(account: string, market: string, isLong: bo
  * Environment Variables:
  *   MARKET_ADDRESS: Market address (required)
  *   IS_LONG: Position direction (optional, default true)
- *   SIZE_USD: Size to close in USD (optional, default 100000)
+ *   SIZE_USD: Size to close in USD (optional, default 500)
  *   COLLATERAL_DELTA: Collateral to withdraw (optional, default 0 - proportional release)
  *
  * Order type: MarketDecrease (4) - Market order to decrease position

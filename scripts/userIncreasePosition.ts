@@ -63,8 +63,8 @@ async function getPositionFromKeeper(account: string, market: string, isLong: bo
  * Environment Variables:
  *   MARKET_ADDRESS: Market address (required)
  *   IS_LONG: Position direction (optional, default true)
- *   SIZE_USD: Additional position size in USD (optional, default 100000)
- *   COLLATERAL_AMOUNT: Additional collateral (optional, default 5 ETH for long, 25000 USDC for short)
+ *   SIZE_USD: Additional position size in USD (optional, default 500)
+ *   COLLATERAL_AMOUNT: Additional collateral (optional, default 0.1 ETH for long, 100 USDC for short)
  *
  * Order type: MarketIncrease (2) - Market order to increase position
  */
