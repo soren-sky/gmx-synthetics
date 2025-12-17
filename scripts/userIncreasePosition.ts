@@ -25,18 +25,48 @@ function httpGet(url: string): Promise<string> {
   });
 }
 
+// Fetch position from keeper debug API
+interface KeeperPosition {
+  position_key: string;
+  account: string;
+  market: string;
+  collateral_token: string;
+  is_long: boolean;
+  size_in_usd: string;
+  size_in_tokens: string;
+  collateral_amount: string;
+  status: string;
+}
+
+async function getPositionFromKeeper(account: string, market: string, isLong: boolean): Promise<KeeperPosition | null> {
+  try {
+    const url = `${KEEPER_API_URL}/api/v1/bsc/positions?account=${account}&market=${market}&status=Active&limit=100`;
+    const responseText = await httpGet(url);
+    const data = JSON.parse(responseText) as { count?: number; positions?: KeeperPosition[] };
+
+    if (!data.positions || data.positions.length === 0) {
+      return null;
+    }
+
+    // Find matching position by direction
+    const position = data.positions.find((p: KeeperPosition) => p.is_long === isLong);
+    return position || null;
+  } catch (e: any) {
+    return null;
+  }
+}
+
 /**
- * User Close Position Script (Full Close)
- * Close an entire position
+ * User Increase Position Script
+ * Add to an existing position (increase position size)
  *
  * Environment Variables:
  *   MARKET_ADDRESS: Market address (required)
  *   IS_LONG: Position direction (optional, default true)
- *   SIZE_USD: Full position size in USD to close (required for full close, or use CLOSE_ALL=true)
- *   CLOSE_ALL: If true, will attempt to close maximum position (optional)
+ *   SIZE_USD: Additional position size in USD (optional, default 100000)
+ *   COLLATERAL_AMOUNT: Additional collateral (optional, default 5 ETH for long, 25000 USDC for short)
  *
- * Order type: MarketDecrease (4) - Market order to decrease position
- * Note: For full close, sizeDeltaUsd should equal the full position size
+ * Order type: MarketIncrease (2) - Market order to increase position
  */
 
 // GMX V2 Order Types
@@ -108,51 +138,6 @@ async function getWntAddress(): Promise<string> {
   return "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd";
 }
 
-// Get position key
-function getPositionKey(account: string, market: string, collateralToken: string, isLong: boolean): string {
-  return ethers.utils.solidityKeccak256(
-    ["address", "address", "address", "bool"],
-    [account, market, collateralToken, isLong]
-  );
-}
-
-// Fetch position from keeper debug API
-interface KeeperPosition {
-  position_key: string;
-  account: string;
-  market: string;
-  collateral_token: string;
-  is_long: boolean;
-  size_in_usd: string;
-  size_in_tokens: string;
-  collateral_amount: string;
-  status: string;
-}
-
-async function getPositionFromKeeper(account: string, market: string, isLong: boolean): Promise<KeeperPosition | null> {
-  try {
-    const url = `${KEEPER_API_URL}/api/v1/bsc/positions?account=${account}&market=${market}&status=Active&limit=100`;
-    console.log("  Keeper API URL:", url);
-
-    const responseText = await httpGet(url);
-    const data = JSON.parse(responseText) as { count?: number; positions?: KeeperPosition[] };
-
-    if (!data.positions || data.positions.length === 0) {
-      console.log("  No positions found in keeper DB");
-      return null;
-    }
-
-    console.log("  Found", data.count || data.positions.length, "position(s) in keeper DB");
-
-    // Find matching position by direction
-    const position = data.positions.find((p: KeeperPosition) => p.is_long === isLong);
-    return position || null;
-  } catch (e: any) {
-    console.error("  Failed to fetch from keeper API:", e.message);
-    return null;
-  }
-}
-
 async function main() {
   const [wallet] = await ethers.getSigners();
   console.log("Wallet address:", wallet.address);
@@ -160,9 +145,9 @@ async function main() {
 
   // Get contract instances
   const exchangeRouter: ExchangeRouter = await ethers.getContract("ExchangeRouter");
+  const router = await ethers.getContract("Router");
   const orderVault = await ethers.getContract("OrderVault");
   const dataStore = await ethers.getContract("DataStore");
-  const reader = await ethers.getContract("Reader");
 
   console.log("\nContract addresses:");
   console.log("  ExchangeRouter:", exchangeRouter.address);
@@ -172,7 +157,7 @@ async function main() {
   const marketAddress = process.env.MARKET_ADDRESS;
   if (!marketAddress) {
     console.error("\nError: MARKET_ADDRESS environment variable is required");
-    console.log("\nUsage: MARKET_ADDRESS=0x... IS_LONG=true make user-close");
+    console.log("\nUsage: MARKET_ADDRESS=0x... IS_LONG=true SIZE_USD=100000 make user-increase");
     process.exit(1);
   }
   console.log("  Market:", marketAddress);
@@ -187,79 +172,113 @@ async function main() {
   // Determine collateral token based on direction
   const collateralTokenAddress = isLong ? marketTokens.longToken : marketTokens.shortToken;
   const collateralDecimals = isLong ? marketTokens.longDecimals : marketTokens.shortDecimals;
+  const collateralToken: MintableToken = await ethers.getContractAt("MintableToken", collateralTokenAddress);
 
-  // Get WNT address
+  // Get WNT address for checking
   const wntAddress = await getWntAddress();
   const isCollateralWnt = collateralTokenAddress.toLowerCase() === wntAddress.toLowerCase();
 
-  // Try to get current position from keeper API first
-  console.log("\n  Fetching position from keeper database...");
+  // Fetch current position from keeper API (for display)
   const keeperPosition = await getPositionFromKeeper(wallet.address, marketAddress, isLong);
 
-  let sizeDeltaUsd;
-  let positionSizeUsd = 0;
-  let positionKey: string;
-
   if (keeperPosition) {
-    // Use position data from keeper
-    positionKey = keeperPosition.position_key;
-    console.log("  Position Key:", positionKey);
+    const currentSizeInUsdBN = ethers.BigNumber.from(keeperPosition.size_in_usd);
+    const currentSizeUsd = parseFloat(ethers.utils.formatUnits(currentSizeInUsdBN, 30));
 
-    // Parse size from keeper (stored as string with 30 decimals)
-    const sizeInUsdBN = ethers.BigNumber.from(keeperPosition.size_in_usd);
-    positionSizeUsd = parseFloat(ethers.utils.formatUnits(sizeInUsdBN, 30));
-
-    console.log("\nCurrent Position (from keeper DB):");
-    console.log("  Size in USD:", positionSizeUsd.toLocaleString());
+    console.log("\nExisting Position (from keeper DB):");
+    console.log("  Position Key:", keeperPosition.position_key);
+    console.log("  Current Size:", currentSizeUsd.toLocaleString(), "USD");
     console.log("  Collateral:", ethers.utils.formatUnits(keeperPosition.collateral_amount, collateralDecimals));
-    console.log("  Is Long:", keeperPosition.is_long);
-    console.log("  Status:", keeperPosition.status);
-
-    if (sizeInUsdBN.eq(0)) {
-      console.error("\nError: Position size is zero!");
-      console.log("The position may have already been closed.");
-      process.exit(1);
-    }
-
-    // Use full position size for closing
-    sizeDeltaUsd = sizeInUsdBN;
   } else {
-    // No position found in keeper DB
-    positionKey = getPositionKey(wallet.address, marketAddress, collateralTokenAddress, isLong);
-    console.error("\nError: No active position found in keeper database!");
-    console.error("\nDetails:");
-    console.error("  Account:", wallet.address);
-    console.error("  Market:", marketAddress);
-    console.error("  Direction:", isLong ? "LONG" : "SHORT");
-    console.error("  Position Key:", positionKey);
-    console.error("\nPossible causes:");
-    console.error("  - No position exists for this account/market/direction");
-    console.error("  - Position was already closed");
-    console.error("  - Keeper service is not running or not synced");
-    console.error("\nTip: Make sure the keeper service is running and has synced the position.");
-    console.error(
-      "     You can check positions at: " + KEEPER_API_URL + "/api/v1/bsc/positions?account=" + wallet.address
+    console.log("\nNo existing position found - this will create a new position");
+  }
+
+  // Parse parameters
+  // SIZE_USD: Additional position size in USD (default 10)
+  const sizeUsd = process.env.SIZE_USD ? parseInt(process.env.SIZE_USD) : 10;
+  const sizeDeltaUsd = decimalToFloat(sizeUsd);
+
+  // COLLATERAL_AMOUNT: Additional collateral
+  // If not specified, calculate based on SIZE_USD with ~10x leverage
+  // Collateral = SIZE_USD / 10 (in USD terms)
+  let collateralAmount;
+  const leverage = process.env.LEVERAGE ? parseFloat(process.env.LEVERAGE) : 10;
+  const collateralUsd = sizeUsd / leverage;
+
+  if (isLong) {
+    // Long token collateral (dynamic decimals)
+    // Assume ETH price ~$3000 for rough calculation
+    const ethPrice = 3000;
+    const defaultCollateralEth = collateralUsd / ethPrice;
+    const collateralEth = process.env.COLLATERAL_AMOUNT
+      ? parseFloat(process.env.COLLATERAL_AMOUNT)
+      : defaultCollateralEth;
+    collateralAmount = expandDecimals(Math.floor(collateralEth * 1000000), collateralDecimals - 6);
+    console.log(
+      "  Additional Collateral:",
+      collateralEth.toFixed(6),
+      "ETH (~$" + (collateralEth * ethPrice).toFixed(2) + ")"
     );
-    process.exit(1);
+    console.log("  Target Leverage:", leverage + "x");
+  } else {
+    // Short token collateral (dynamic decimals)
+    const collateralUsdc = process.env.COLLATERAL_AMOUNT ? parseFloat(process.env.COLLATERAL_AMOUNT) : collateralUsd;
+    collateralAmount = expandDecimals(Math.floor(collateralUsdc * 1000000), collateralDecimals - 6);
+    console.log("  Additional Collateral:", collateralUsdc.toFixed(2), "USDC");
+    console.log("  Target Leverage:", leverage + "x");
   }
 
   // Execution fee: 0.02 BNB
   const executionFee = expandDecimals(2, 16);
 
-  // Acceptable price for closing
-  // For LONG close: min price we accept (we're selling)
-  // For SHORT close: max price we accept (we're buying back)
+  // Acceptable price
+  // For LONG: max price we're willing to pay
+  // For SHORT: min price we're willing to accept
   // Using wide range for market orders (BTC ~$86,000, allow 20% slippage)
   const acceptablePrice = isLong
-    ? expandDecimals(50000, 12) // $50,000 min for closing long (allows price decrease)
-    : expandDecimals(150000, 12); // $150,000 max for closing short (allows price increase)
+    ? expandDecimals(150000, 12) // $150,000 max for long (allows price increase)
+    : expandDecimals(50000, 12); // $50,000 min for short (allows price decrease)
 
-  console.log("\nClose Order Details:");
-  console.log("  Order Type: MarketDecrease (Full Close)");
+  console.log("\nOrder Details:");
+  console.log("  Order Type: MarketIncrease (Add to Position)");
   console.log("  Direction:", isLong ? "LONG" : "SHORT");
-  console.log("  Size to Close:", positionSizeUsd.toLocaleString(), "USD (100%)");
-  console.log("  Acceptable Price:", isLong ? "$4,900 min" : "$5,100 max");
+  console.log("  Additional Size:", sizeUsd.toLocaleString(), "USD");
+  console.log("  Acceptable Price:", isLong ? "$150,000 max" : "$50,000 min");
   console.log("  Execution Fee:", ethers.utils.formatEther(executionFee), "BNB");
+
+  // Check and prepare collateral
+  const collateralBalance = await collateralToken.balanceOf(wallet.address);
+  console.log("\nCurrent collateral balance:", ethers.utils.formatUnits(collateralBalance, collateralDecimals));
+
+  if (isCollateralWnt && collateralBalance.lt(collateralAmount)) {
+    console.log("Wrapping BNB to WNT...");
+    const wntAbi = [
+      "function deposit() external payable",
+      "function balanceOf(address account) external view returns (uint256)",
+    ];
+    const wntContract = new ethers.Contract(wntAddress, wntAbi, wallet);
+    const totalNeeded = collateralAmount.add(executionFee);
+    const depositTx = await wntContract.deposit({ value: totalNeeded });
+    await depositTx.wait();
+    console.log("WNT deposit complete");
+  } else if (!isCollateralWnt && collateralBalance.lt(collateralAmount)) {
+    console.log("Minting collateral token for testing...");
+    try {
+      const mintTx = await collateralToken.mint(wallet.address, collateralAmount);
+      await mintTx.wait();
+      console.log("Collateral token minted");
+    } catch (e) {
+      console.log("Note: Could not mint collateral token");
+    }
+  }
+
+  // Approve Router
+  const collateralAllowance = await collateralToken.allowance(wallet.address, router.address);
+  if (collateralAllowance.lt(collateralAmount)) {
+    console.log("\nApproving collateral token...");
+    const approveTx = await collateralToken.approve(router.address, ethers.constants.MaxUint256);
+    await approveTx.wait();
+  }
 
   // Build Order params
   const params: OrderUtils.CreateOrderParamsStruct = {
@@ -274,55 +293,64 @@ async function main() {
     },
     numbers: {
       sizeDeltaUsd: sizeDeltaUsd,
-      initialCollateralDeltaAmount: bigNumberify(0), // Let system calculate
-      triggerPrice: bigNumberify(0), // Market order
+      initialCollateralDeltaAmount: collateralAmount,
+      triggerPrice: bigNumberify(0),
       acceptablePrice: acceptablePrice,
       executionFee: executionFee,
       callbackGasLimit: bigNumberify(0),
       minOutputAmount: bigNumberify(0),
       validFromTime: bigNumberify(0),
     },
-    orderType: OrderType.MarketDecrease,
-    decreasePositionSwapType: 0, // NoSwap - receive collateral token
+    orderType: OrderType.MarketIncrease,
+    decreasePositionSwapType: 0,
     isLong: isLong,
-    shouldUnwrapNativeToken: isCollateralWnt, // Unwrap WNT to BNB if applicable
+    shouldUnwrapNativeToken: false,
     autoCancel: false,
     referralCode: ethers.constants.HashZero,
     dataList: [], // Required by contract - empty array for no additional data
   };
 
-  console.log("\nCreating full close order...");
+  console.log("\nCreating increase position order...");
 
   // Use multicall to send order request
   const multicallArgs = [];
 
-  // Only need to send execution fee
-  multicallArgs.push(exchangeRouter.interface.encodeFunctionData("sendWnt", [orderVault.address, executionFee]));
+  if (isCollateralWnt) {
+    multicallArgs.push(
+      exchangeRouter.interface.encodeFunctionData("sendWnt", [orderVault.address, collateralAmount.add(executionFee)])
+    );
+  } else {
+    multicallArgs.push(
+      exchangeRouter.interface.encodeFunctionData("sendTokens", [
+        collateralTokenAddress,
+        orderVault.address,
+        collateralAmount,
+      ])
+    );
+    multicallArgs.push(exchangeRouter.interface.encodeFunctionData("sendWnt", [orderVault.address, executionFee]));
+  }
 
-  // Create order
   multicallArgs.push(exchangeRouter.interface.encodeFunctionData("createOrder", [params]));
+
+  const totalBnbValue = isCollateralWnt ? collateralAmount.add(executionFee) : executionFee;
 
   // Simulate transaction
   console.log("\nSimulating transaction...");
   try {
     await exchangeRouter.callStatic.multicall(multicallArgs, {
-      value: executionFee,
+      value: totalBnbValue,
       gasLimit: 8000000,
     });
     console.log("Simulation successful");
   } catch (e: any) {
     console.error("Simulation failed:", e.message);
-    console.log("\nPossible reasons:");
-    console.log("  - No existing position to close");
-    console.log("  - Position already closed");
-    console.log("  - Insufficient liquidity in market");
     process.exit(1);
   }
 
   // Execute transaction
   console.log("\nSending transaction...");
   const tx = await exchangeRouter.multicall(multicallArgs, {
-    value: executionFee,
+    value: totalBnbValue,
     gasLimit: 8000000,
   });
 
@@ -335,23 +363,9 @@ async function main() {
   console.log("  Gas used:", receipt.gasUsed.toString());
   console.log("  Status:", receipt.status === 1 ? "Success" : "Failed");
 
-  // Query pending orders count
-  const ORDER_LIST_KEY = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORDER_LIST"));
-  const orderCount = await dataStore.getBytes32Count(ORDER_LIST_KEY);
-  console.log("\nTotal pending orders:", orderCount.toString());
-
-  console.log("\n=== Full Close Order created successfully! ===");
+  console.log("\n=== Increase Position Order created successfully! ===");
   console.log("The order will be executed by a keeper at current market price.");
-  console.log("\nYour entire position will be closed.");
-  console.log("You will receive: Full Collateral + PnL (minus fees)");
-  console.log("\nPnL Calculation:");
-  if (isLong) {
-    console.log("  LONG: PnL = (Close Price - Entry Price) x Position Size");
-    console.log("  Profit if price went UP since entry");
-  } else {
-    console.log("  SHORT: PnL = (Entry Price - Close Price) x Position Size");
-    console.log("  Profit if price went DOWN since entry");
-  }
+  console.log("\nYour position will be increased by:", sizeUsd.toLocaleString(), "USD");
 }
 
 main()
