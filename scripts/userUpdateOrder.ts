@@ -145,9 +145,22 @@ async function main() {
   }
   const newTriggerPrice = expandDecimals(Math.floor(newTriggerPriceUsd), 12);
 
-  // SIZE_USD: New size (0 = keep current)
-  const newSizeUsd = process.env.SIZE_USD ? parseInt(process.env.SIZE_USD) : 0;
-  const newSizeDeltaUsd = newSizeUsd > 0 ? expandDecimals(newSizeUsd, 30) : bigNumberify(0);
+  // SIZE_USD: New size (if not specified, use current size from keeper)
+  // IMPORTANT: GMX contract does NOT treat 0 as "keep current" - it directly sets the value
+  // We must pass the actual current sizeDeltaUsd if user wants to keep it unchanged
+  let newSizeDeltaUsd;
+  if (process.env.SIZE_USD) {
+    const newSizeUsd = parseInt(process.env.SIZE_USD);
+    newSizeDeltaUsd = expandDecimals(newSizeUsd, 30);
+  } else if (currentSizeUsd.gt(0)) {
+    // Use current size from keeper
+    newSizeDeltaUsd = currentSizeUsd;
+    console.log("  Using current size from order:", ethers.utils.formatUnits(currentSizeUsd, 30), "USD");
+  } else {
+    console.error("\nError: Could not determine order size. Please specify SIZE_USD.");
+    console.log("\nUsage: ORDER_KEY=0x... TRIGGER_PRICE=85000 SIZE_USD=500 make user-update-order");
+    process.exit(1);
+  }
 
   // ACCEPTABLE_PRICE: Auto-calculate based on order type and trigger price
   // For LimitIncrease (LONG): acceptablePrice = triggerPrice * 1.02 (max price after trigger)
@@ -186,7 +199,12 @@ async function main() {
   console.log(
     "  New Acceptable Price: $" + parseFloat(ethers.utils.formatUnits(newAcceptablePrice, 12)).toLocaleString()
   );
-  console.log("  New Size USD:", newSizeUsd > 0 ? newSizeUsd.toLocaleString() : "(unchanged)");
+  console.log(
+    "  New Size USD:",
+    process.env.SIZE_USD
+      ? process.env.SIZE_USD
+      : "(using current: " + ethers.utils.formatUnits(newSizeDeltaUsd, 30) + ")"
+  );
 
   console.log("\nUpdating order...");
 
