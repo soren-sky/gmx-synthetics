@@ -61,7 +61,7 @@ async function fetchKeeperPositions(keeperApi: string, account?: string): Promis
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-    const data: KeeperAPIResponse = await response.json();
+    const data = (await response.json()) as KeeperAPIResponse;
     return data.positions || [];
   } catch (error: any) {
     console.log(`  Warning: Could not fetch from Keeper API: ${error.message}`);
@@ -83,7 +83,7 @@ async function fetchRedisLiquidationPrice(
   const url = `${keeperApi}/api/v1/redis/liquidation?symbol=${symbol}&direction=${direction}&price=${price}`;
   try {
     const resp = await fetch(url);
-    const data = await resp.json();
+    const data = (await resp.json()) as { positions?: any[] };
     for (const p of data.positions || []) {
       // API returns position_id and liquidate_price (not position_key/liquidation_price)
       if (p.position_id === positionKey) {
