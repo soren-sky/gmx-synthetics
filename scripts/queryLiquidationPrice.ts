@@ -69,6 +69,33 @@ async function fetchKeeperPositions(keeperApi: string, account?: string): Promis
   }
 }
 
+async function fetchRedisLiquidationPrice(
+  keeperApi: string,
+  marketAddress: string,
+  isLong: boolean,
+  positionKey: string
+): Promise<number> {
+  const direction = isLong ? "long" : "short";
+  const symbol = marketAddress.toLowerCase();
+  // For long: use price=0 to get all positions (liquidation_price >= 0)
+  // For short: use price=999999999 to get all positions (liquidation_price <= 999999999)
+  const price = isLong ? 0 : 999999999;
+  const url = `${keeperApi}/api/v1/redis/liquidation?symbol=${symbol}&direction=${direction}&price=${price}`;
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    for (const p of data.positions || []) {
+      // API returns position_id and liquidate_price (not position_key/liquidation_price)
+      if (p.position_id === positionKey) {
+        return parseFloat(p.liquidate_price || "0");
+      }
+    }
+    return 0;
+  } catch (_e) {
+    return 0;
+  }
+}
+
 async function isLiquidatableAtPrice(
   reader: any,
   dataStore: any,
@@ -390,8 +417,8 @@ async function main() {
     const longTokenDecimals = await getTokenDecimals(market.longToken);
     const shortTokenDecimals = await getTokenDecimals(market.shortToken);
 
-    // Parse Redis liquidation price (Keeper uses "liquidate_price" field)
-    const redisLiqPrice = parseFloat(pos.liquidate_price || "0");
+    // Fetch Redis liquidation price using market address as symbol
+    const redisLiqPrice = await fetchRedisLiquidationPrice(keeperApi, pos.market, isLong, positionKey);
 
     // Get entry price from Keeper's average_price field (most accurate)
     // average_price is stored as price * 10^12 format (GMX price format)
