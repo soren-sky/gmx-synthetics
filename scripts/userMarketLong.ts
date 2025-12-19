@@ -11,7 +11,7 @@ const { ethers, deployments } = hre as any;
  *
  * Environment Variables:
  *   MARKET_ADDRESS: Market address (required)
- *   SIZE_USD: Position size in USD (optional, default 200000)
+ *   SIZE_USD: Position size in USD (optional, default 500)
  *   COLLATERAL_AMOUNT: Collateral amount in ETH (optional, default 10)
  *   LEVERAGE: Leverage multiplier (optional, ignored if COLLATERAL_AMOUNT is set)
  *
@@ -138,8 +138,8 @@ async function main() {
   console.log("  Long token is WNT:", isLongTokenWnt);
 
   // Parse parameters
-  // SIZE_USD: Position size in USD (default $10 for small pools)
-  const sizeUsd = process.env.SIZE_USD ? parseInt(process.env.SIZE_USD) : 10;
+  // SIZE_USD: Position size in USD (default $500 for testnet small pools)
+  const sizeUsd = process.env.SIZE_USD ? parseInt(process.env.SIZE_USD) : 500;
   const sizeDeltaUsd = decimalToFloat(sizeUsd);
 
   // COLLATERAL_AMOUNT: Collateral in long token units (default 0.0005 BTCB ~ $45)
